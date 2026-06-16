@@ -1,0 +1,22 @@
+{
+  "character": {
+    "id": 792,
+    "name": "logggggix",
+    "level": 1,
+    "exp": 0,
+    "hp": 500,
+    "maxHp": 500,
+    "mp": 100,
+    "maxMp": 100,
+    "strength": 0,
+    "constitution": 0,
+    "toughness": 0,
+    "agility": 0,
+    "technique": 0,
+    "luck": 0,
+    "statPoints": 10,
+    "gold": 0,
+    "floor": 1,
+    "karma": 0
+  }
+}

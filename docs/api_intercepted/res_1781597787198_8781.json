@@ -1,0 +1,7 @@
+{
+  "url": "https://gunart-backend.onrender.com/api/forge/collect/8781",
+  "method": "POST",
+  "data": {
+    "collected": true
+  }
+}

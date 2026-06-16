@@ -1,0 +1,10 @@
+{
+  "zone": "starting_town",
+  "floor": 1,
+  "zones": {
+    "starting_town": { "name": "起始之鎮", "canFight": false },
+    "great_plains": { "name": "大草原", "canFight": true }
+  },
+  "restStartedAt": null,
+  "moveEndsAt": null
+}

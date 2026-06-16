@@ -12,6 +12,7 @@
     "core-js": "^3.8.3",
     "element-plus": "^2.2.32",
     "moment": "^2.29.4",
+    "puppeteer": "^25.1.0",
     "vue": "^3.2.13",
     "vue-axios": "^3.5.2",
     "vue-class-component": "^8.0.0-0",

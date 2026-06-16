@@ -1,0 +1,19 @@
+{
+  "url": "https://gunart-backend.onrender.com/api/auth/login",
+  "method": "POST",
+  "headers": {
+    "sec-ch-ua-platform": "\"Windows\"",
+    "referer": "https://gunartonline.pages.dev/",
+    "accept-language": "zh-TW,zh;q=0.9",
+    "sec-ch-ua": "\"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+    "content-type": "application/json",
+    "sec-ch-ua-mobile": "?0",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "accept": "*/*",
+    "origin": "https://gunartonline.pages.dev"
+  },
+  "postData": {
+    "username": "jackylierx02",
+    "password": "qweASD0976"
+  }
+}

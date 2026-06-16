@@ -1,0 +1,25 @@
+{
+  "character": {
+    "endpoint": "/api/character",
+    "structure": {
+      "hp": "number",
+      "mp": "number",
+      "level": "number",
+      "statPoints": "number"
+    }
+  },
+  "inventory": {
+    "endpoint": "/api/inventory",
+    "equipment_endpoint": "/api/forge/equipment"
+  },
+  "battle": {
+    "endpoint": "/api/battles"
+  },
+  "forge": {
+    "recipes": "/api/forge/recipes",
+    "jobs": "/api/forge/jobs"
+  },
+  "tower": {
+    "status": "/api/tower/status"
+  }
+}

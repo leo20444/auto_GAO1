@@ -1,0 +1,15 @@
+{
+  "items": [],
+  "equipment": [
+    {
+      "id": 7712,
+      "name": "鐵大劍",
+      "atk": 100,
+      "def": 50,
+      "durability": 300,
+      "max_durability": 300,
+      "tags": ["GreatSword"],
+      "hand_type": "two_hand"
+    }
+  ]
+}
