@@ -1,6 +1,7 @@
 import map from "../common/mapping";
 import specialMap from "../common/specialMap";
 import { ElMessage } from "element-plus";
+import sleep from "./sleep";
 
 class autoBattleChecker {
   constructor(
@@ -26,9 +27,20 @@ class autoBattleChecker {
   checkSetting = async () => {
     try {
       console.log("checkSetting");
-      if (!(await this.checkDeath())) return false;
-      if (this.medicineCheckTag.value) {
-        if (!(await this.checkMedicine())) return false;
+      if (this.profile.hp <= 0) {
+        if (this.profile.zoneName === "起始之鎮") {
+          ElMessage("偵測到死亡回城，等待 3 秒後直接出發前往目標地圖...");
+          await sleep(3000);
+          this.setProfileInfo(
+            await this.user.move(getMapIdByName(this.setting.map))
+          );
+          return false;
+        }
+        // 死亡不用休息，繞過 HP/SP 檢查，但仍需確保在地圖上
+        if (!(await this.checkMap())) return false;
+        if (!this.weaponCheckTag) return true;
+        if (!(await this.myWeaponChecker.checkEquipment())) return false;
+        return true;
       }
       if (!(await this.checkHpSp())) return false;
       if (!(await this.checkMap())) return false;
@@ -38,59 +50,62 @@ class autoBattleChecker {
       return true;
     } catch (error) {
       console.log(error);
+      if (error === "CRITICAL_STOP_NO_WEAPON") {
+        throw error;
+      }
       return false;
     }
-  };
-
-  checkDeath = async () => {
-    if (this.profile.hp <= 0) {
-      ElMessage("你死了廢物！");
-      await this.revive();
-      return false;
-    }
-
-    return true;
   };
 
   checkHpSp = async () => {
-    if (
-      this.profile.hp <= this.setting.hp ||
-      this.profile.sp <= this.setting.sp
-    ) {
-      ElMessage("體力血量不夠！");
-      await this.rest();
-      return false;
-    }
-    return true;
-  };
+    const hpMode = this.setting.hpRecoveryMode || "rest";
+    const spMode = this.setting.spRecoveryMode || "rest";
 
-  checkMedicine = async () => {
-    while (this.profile.hp <= this.setting.hp) {
-      if (
-        !(await this.eatMedicine(
+    // 1. 檢查 HP
+    if (this.profile.hp <= this.setting.hp) {
+      if (hpMode === "medicine") {
+        ElMessage("HP 低於設定，嘗試吃藥...");
+        const eatSuccess = await this.eatMedicine(
           this.medicineSetting.medicineHpId,
           this.medicineSetting.medicineHpQuantity
-        ))
-      )
+        );
+        if (eatSuccess && this.profile.hp > this.setting.hp) {
+          ElMessage("HP 吃藥成功補滿至門檻以上。");
+        } else {
+          ElMessage("HP 補品不足或補不滿，自動降級為休息！");
+          await this.rest();
+          return false;
+        }
+      } else {
+        ElMessage("HP 低於門檻，自動休息！");
+        await this.rest();
         return false;
+      }
     }
 
-    while (this.profile.sp <= this.setting.sp) {
-      if (
-        !(await this.eatMedicine(
+    // 2. 檢查 SP
+    if (this.profile.sp <= this.setting.sp) {
+      if (spMode === "medicine") {
+        ElMessage("SP 低於設定，嘗試吃藥...");
+        const eatSuccess = await this.eatMedicine(
           this.medicineSetting.medicineSpId,
           this.medicineSetting.medicineSpQuantity
-        ))
-      )
+        );
+        if (eatSuccess && this.profile.sp > this.setting.sp) {
+          ElMessage("SP 吃藥成功補滿至門檻以上。");
+        } else {
+          ElMessage("SP 補品不足或補不滿，自動降級為休息！");
+          await this.rest();
+          return false;
+        }
+      } else {
+        ElMessage("SP 低於門檻，自動休息！");
+        await this.rest();
         return false;
+      }
     }
 
     return true;
-  };
-
-  revive = async () => {
-    await this.user.revive();
-    ElMessage("死者甦醒之術！");
   };
 
   checkMap = async () => {
@@ -99,7 +114,20 @@ class autoBattleChecker {
       return false;
     }
 
-    // 判斷是否到秘境
+    // 1. 如果角色當前在「起始之鎮」
+    if (this.profile.zoneName === "起始之鎮") {
+      // 檢查是否需要休息（血量或魔量沒滿）
+      if (
+        this.profile.hp < this.profile.fullHp ||
+        this.profile.sp < this.profile.fullSp
+      ) {
+        ElMessage("回城休息中，補滿狀態...");
+        await this.rest(); // 發起休息
+        return false; // 等待休息完成
+      }
+    }
+
+    // 2. 判斷是否到秘境
     if (
       specialMap.includes(this.setting.map) &&
       this.profile.zoneName != this.setting.map
@@ -111,8 +139,9 @@ class autoBattleChecker {
       }
     }
 
+    // 3. 移動到目標地圖
     if (this.profile.zoneName !== this.setting.map) {
-      ElMessage("地圖不對！");
+      ElMessage("地圖不對，前往目標地圖！");
       this.setProfileInfo(
         await this.user.move(getMapIdByName(this.setting.map))
       );
@@ -120,9 +149,16 @@ class autoBattleChecker {
       return false;
     }
 
-    if (this.profile.huntStage >= this.setting.mapLevel) {
-      ElMessage("層數超過！");
-      this.setProfileInfo(await this.user.move(0));
+    // 4. 層數上限檢查
+    // 只有在 setting.mapLevel 大於 0 的時候才進行層數上限檢查，若為 0 則代表無上限
+    if (
+      this.setting.mapLevel > 0 &&
+      this.profile.huntStage >= this.setting.mapLevel
+    ) {
+      ElMessage(
+        `已達到目標層數 (${this.profile.huntStage}F >= ${this.setting.mapLevel}F)，正在回城休息...`
+      );
+      this.setProfileInfo(await this.user.move(0)); // 移回起始之鎮 (0)
       ElMessage("回城！");
       return false;
     }
@@ -196,10 +232,7 @@ class autoBattleChecker {
       return false;
     }
     ElMessage("開始吃補品！");
-    let { profile: profile, items: items } = await this.user.eatMedicine(
-      medicineId,
-      medicineQuantity
-    );
+    let { profile } = await this.user.eatMedicine(medicineId, medicineQuantity);
     if (!profile) return false;
     this.setProfileInfo(profile);
     this.profile = profile;

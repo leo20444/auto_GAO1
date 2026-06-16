@@ -46,33 +46,54 @@ class weaponChecker {
       return true;
     } catch (error) {
       console.log(error);
+      if (error === "CRITICAL_STOP_NO_WEAPON") {
+        throw error;
+      }
       return false;
     }
   };
 
   checkWeapon = async (sortedEquipment) => {
-    if (sortedEquipment.length == 0) {
-      if (
-        !this.checkEmptyWeaponCanBeSelect(
-          this.sortedEquipmentCanBeSelect.weapon,
-          "武器"
-        )
-      ) {
-        return false;
+    // 如果沒裝備武器
+    if (sortedEquipment.length === 0) {
+      if (this.sortedEquipmentCanBeSelect.weapon.length === 0) {
+        if (this.setting.allowEmptyHanded) {
+          ElMessage("目前無裝備且無後備武器，空手戰鬥中...");
+          return true; // 允許空手
+        } else {
+          ElMessage("未穿戴武器且無可用武器，停止戰鬥。");
+          throw "CRITICAL_STOP_NO_WEAPON"; // 停止
+        }
       }
+      // 有後備武器，穿上
       await this.wearWeapon();
+      return true;
     }
 
-    for (let index = 0; index < sortedEquipment.length; index++) {
-      const equipment = sortedEquipment[index];
-      if (
-        !(await this.checkDurability(
-          equipment,
-          this.sortedEquipmentCanBeSelect.weapon
-        ))
-      ) {
-        await this.wearWeapon();
+    // 有裝備武器，檢查耐久度
+    const currentWeapon = sortedEquipment[0];
+    if (currentWeapon.durability < this.setting.weaponDuration) {
+      ElMessage(
+        `目前武器 ${currentWeapon.name} 耐久低於門檻 (${currentWeapon.durability} < ${this.setting.weaponDuration})，嘗試更換...`
+      );
+
+      // 脫下當前武器
+      if (currentWeapon.id) {
+        await this.unEquipped(currentWeapon.id);
       }
+
+      if (this.sortedEquipmentCanBeSelect.weapon.length === 0) {
+        if (this.setting.allowEmptyHanded) {
+          ElMessage("無可用備用武器，空手繼續戰鬥...");
+          return true; // 允許空手
+        } else {
+          ElMessage("武器損壞且無可用備用武器，停止戰鬥。");
+          throw "CRITICAL_STOP_NO_WEAPON"; // 停止
+        }
+      }
+
+      // 穿上新武器
+      await this.wearWeapon();
     }
 
     return true;

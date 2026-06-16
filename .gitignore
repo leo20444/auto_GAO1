@@ -2,8 +2,9 @@
 node_modules
 /dist
 
-
-# local env files
+# 爬蟲與機密設定
+crawler_api.js
+.env
 .env.local
 .env.*.local
 
@@ -21,4 +22,12 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
-.env
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 建置快取
+*.cache
+.parcel-cache

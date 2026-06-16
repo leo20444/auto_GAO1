@@ -5,378 +5,527 @@ const baseurl = "https://gunart-backend.onrender.com/api";
 function user(inputToken) {
   this.token = inputToken;
 
-  this.getProfile = async function () {
-    return await axios
-      .get(`${baseurl}/profile`, {
-        headers: {
-          token: this.token,
-        },
-      })
-      .then((response) => {
-        let profile = response.data;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return false;
+  const getHeaders = () => {
+    // 確保 token 不會重複加上 Bearer 字樣
+    const cleanToken = this.token.replace("Bearer ", "");
+    return {
+      Authorization: `Bearer ${cleanToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+  };
+
+  // 區域對照表：舊版 ID -> 新版 Key
+  const zoneMapping = {
+    0: "starting_town",
+    1: "great_plains",
+    2: "bull_garden",
+    3: "childrens_park",
+    4: "mushroom_garden",
+    5: "yuanmingyuan",
+  };
+
+  // 輔助函式：標準化資料結構，讓舊的元件能繼續運作
+  const normalizeProfile = (character, towerStatus, activeJob, mineStatus) => {
+    if (!character) return null;
+
+    let actionStatus = "空閒";
+    let actionStart = null;
+    let forgingCompletionTime = null;
+
+    if (towerStatus) {
+      if (towerStatus.restStartedAt) {
+        actionStatus = "休息";
+        actionStart = towerStatus.restStartedAt;
+      } else if (towerStatus.moveEndsAt) {
+        actionStatus = "移動";
+        actionStart = towerStatus.moveEndsAt;
+      }
+    }
+
+    if (actionStatus === "空閒") {
+      if (activeJob) {
+        actionStatus = "鍛造";
+        actionStart = activeJob.createdAt || new Date().toISOString();
+        forgingCompletionTime =
+          activeJob.completionTime || activeJob.completeAt;
+      } else if (mineStatus && mineStatus.active) {
+        actionStatus = "採礦";
+        actionStart = mineStatus.startedAt || new Date().toISOString();
+      }
+    }
+
+    const currentZoneName =
+      towerStatus?.zones?.[towerStatus?.zone]?.name || "未知區域";
+
+    return {
+      ...character,
+      nickname: character.name,
+      fullHp: character.maxHp,
+      sp: character.mp,
+      fullSp: character.maxMp,
+      lv: character.level,
+      nextExp: 1000,
+      actionStatus: actionStatus,
+      actionStart: actionStart || new Date().toISOString(),
+      forgingCompletionTime,
+      zoneName: currentZoneName,
+      huntStage: towerStatus?.floor || 0,
+      towerStatus: towerStatus,
+    };
+  };
+
+  this.getAuthMe = async function () {
+    try {
+      const res = await axios.get(`${baseurl}/auth/me`, {
+        headers: getHeaders(),
       });
+      return res.data;
+    } catch (error) {
+      console.error("getAuthMe error:", error);
+      return false;
+    }
+  };
+
+  this.getPartyStatus = async function () {
+    try {
+      const res = await axios.get(`${baseurl}/party/status`, {
+        headers: getHeaders(),
+      });
+      return res.data;
+    } catch (error) {
+      console.error("getPartyStatus error:", error);
+      return false;
+    }
+  };
+
+  this.getTowerStatus = async function () {
+    try {
+      const res = await axios.get(`${baseurl}/tower/status`, {
+        headers: getHeaders(),
+      });
+      return res.data;
+    } catch (error) {
+      console.error("getTowerStatus error:", error);
+      return false;
+    }
+  };
+
+  this.getProfile = async function () {
+    try {
+      const authMeRes = await axios.get(`${baseurl}/auth/me`, {
+        headers: getHeaders(),
+      });
+      const charData = authMeRes.data?.character;
+
+      const towerRes = await axios.get(`${baseurl}/tower/status`, {
+        headers: getHeaders(),
+      });
+
+      let activeJob = null;
+      try {
+        const jobsRes = await axios.get(`${baseurl}/forge/jobs`, {
+          headers: getHeaders(),
+        });
+        activeJob = jobsRes.data?.jobs?.[0];
+      } catch (e) {
+        console.error("fetch jobs error:", e);
+      }
+
+      let mineStatus = null;
+      try {
+        const mineRes = await axios.get(`${baseurl}/town/mine/status`, {
+          headers: getHeaders(),
+        });
+        mineStatus = mineRes.data;
+      } catch (e) {
+        console.error("fetch mine status error:", e);
+      }
+
+      return normalizeProfile(charData, towerRes.data, activeJob, mineStatus);
+    } catch (error) {
+      console.error("getProfile error:", error);
+      return false;
+    }
   };
 
   this.rest = async function () {
-    return await axios
-      .post(
-        `${baseurl}/action/rest`,
+    try {
+      await axios.post(
+        `${baseurl}/tower/rest/start`,
         {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let profile = response.data;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+        { headers: getHeaders() }
+      );
+      return this.getProfile();
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.restComplete = async function () {
-    return await axios
-      .post(
-        `${baseurl}/action/complete`,
+    try {
+      await axios.post(
+        `${baseurl}/tower/rest/stop`,
         {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let profile = response.data.profile;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+        { headers: getHeaders() }
+      );
+      return this.getProfile();
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.moveComplete = async function () {
-    return await axios
-      .post(
-        `${baseurl}/zone/move/complete`,
+    try {
+      await axios.post(
+        `${baseurl}/tower/arrive`,
         {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let profile = response.data.profile;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+        { headers: getHeaders() }
+      );
+      return this.getProfile();
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.run = async function () {
-    return await axios
-      .post(
-        `${baseurl}/hunt`,
-        {
-          type: 2,
-        },
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let data = response.data;
-        return data;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
+    try {
+      await axios.get(`${baseurl}/party/status`, { headers: getHeaders() });
+      const chooseRes = await axios.post(
+        `${baseurl}/tower/choose`,
+        { option: "run" },
+        { headers: getHeaders() }
+      );
+      const timelineRes = await axios.get(`${baseurl}/tower/timeline`, {
+        headers: getHeaders(),
       });
+      const advanceRes = await axios.post(
+        `${baseurl}/tower/advance`,
+        { option: "run" },
+        { headers: getHeaders() }
+      );
+      const profile = await this.getProfile();
+      return {
+        ...chooseRes.data,
+        ...timelineRes.data,
+        advance: advanceRes.data,
+        exp: advanceRes.data?.expGained || timelineRes.data?.rewards?.exp || 0,
+        gold:
+          advanceRes.data?.goldGained || timelineRes.data?.rewards?.gold || 0,
+        profile,
+      };
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
+  };
+
+  this.getTimeline = async function () {
+    try {
+      const res = await axios.get(`${baseurl}/tower/timeline`, {
+        headers: getHeaders(),
+      });
+      return res.data;
+    } catch (error) {
+      console.error("getTimeline error:", error);
+      return false;
+    }
   };
 
   this.battle = async function () {
-    return await axios
-      .post(
-        `${baseurl}/hunt`,
-        {
-          type: 1,
-        },
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let data = response.data;
-        return data;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
+    try {
+      await axios.get(`${baseurl}/party/status`, { headers: getHeaders() });
+      const chooseRes = await axios.post(
+        `${baseurl}/tower/choose`,
+        { option: "fight" },
+        { headers: getHeaders() }
+      );
+      const timelineRes = await axios.get(`${baseurl}/tower/timeline`, {
+        headers: getHeaders(),
       });
+      const advanceRes = await axios.post(
+        `${baseurl}/tower/advance`,
+        { option: "fight" },
+        { headers: getHeaders() }
+      );
+      const profile = await this.getProfile();
+      return {
+        ...chooseRes.data,
+        ...timelineRes.data,
+        advance: advanceRes.data,
+        exp: advanceRes.data?.expGained || timelineRes.data?.rewards?.exp || 0,
+        gold:
+          advanceRes.data?.goldGained || timelineRes.data?.rewards?.gold || 0,
+        profile,
+      };
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
-  // 換地圖 0:城鎮 1:大草原 2:猛牛原 3:兒童樂園 4:蘑菇園 5:圓明園 6:非洲大草原
   this.move = async function (id) {
-    return await axios
-      .post(
-        `${baseurl}/zone/move/${id}`,
-        {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let profile = response.data.profile;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+    try {
+      const zoneKey = zoneMapping[id] || id;
+      await axios.post(
+        `${baseurl}/tower/move`,
+        { destination: zoneKey },
+        { headers: getHeaders() }
+      );
+      return this.getProfile();
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.path = async function (id) {
-    return await axios
-      .post(
-        `${baseurl}/path`,
+    try {
+      await axios.post(
+        `${baseurl}/tower/path`,
         { pathId: id },
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let profile = response.data.profile;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
-  };
-
-  this.revive = async function () {
-    return await axios
-      .post(
-        `${baseurl}/action/revive`,
-        {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let profile = response.data;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+        { headers: getHeaders() }
+      );
+      return this.getProfile();
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.equip = async function (id) {
-    return await axios
-      .post(
-        `${baseurl}/equipment/${id}/equip`,
-        {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let equipments = response.data.equipments;
-        return equipments;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+    try {
+      await axios.post(
+        `${baseurl}/equip`,
+        { crafted_eq_id: id },
+        { headers: getHeaders() }
+      );
+      const itemsData = await this.item();
+      return itemsData.equipments;
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.unEquip = async function (id) {
-    return await axios
-      .post(
-        `${baseurl}/equipment/${id}/unequip`,
-        {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let equipments = response.data.equipments;
-        return equipments;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
+    try {
+      const currentlyEquippedRes = await axios.get(`${baseurl}/equip`, {
+        headers: getHeaders(),
       });
+      const equipment = currentlyEquippedRes.data.equipment || {};
+      let targetSlot = null;
+      for (const [slot, item] of Object.entries(equipment)) {
+        if (item && item.id === id) {
+          targetSlot = slot;
+          break;
+        }
+      }
+
+      if (targetSlot) {
+        await axios.delete(`${baseurl}/equip/${targetSlot}`, {
+          headers: getHeaders(),
+        });
+      }
+
+      const itemsData = await this.item();
+      return itemsData.equipments;
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.unEquipAll = async function () {
-    return await axios
-      .post(
-        `${baseurl}/equipment/unequipAll`,
-        {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let equipments = response.data.equipments ?? false;
-        return equipments;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
+    try {
+      const currentlyEquippedRes = await axios.get(`${baseurl}/equip`, {
+        headers: getHeaders(),
       });
+      const equipment = currentlyEquippedRes.data.equipment || {};
+      for (const [slot, item] of Object.entries(equipment)) {
+        if (item && item.id) {
+          await axios.delete(`${baseurl}/equip/${slot}`, {
+            headers: getHeaders(),
+          });
+        }
+      }
+      const itemsData = await this.item();
+      return itemsData.equipments;
+    } catch (error) {
+      console.log(error);
+      return false;
+    }
   };
 
   this.item = async function () {
-    return await axios
-      .get(`${baseurl}/items`, {
-        headers: {
-          token: this.token,
-        },
-      })
-      .then((response) => {
-        let items = response.data;
-        return items;
-      })
-      .catch((error) => {
-        console.log(error);
-        return false;
+    try {
+      const invRes = await axios.get(`${baseurl}/inventory`, {
+        headers: getHeaders(),
       });
+      const equipRes = await axios.get(`${baseurl}/forge/equipment`, {
+        headers: getHeaders(),
+      });
+      const currentlyEquippedRes = await axios.get(`${baseurl}/equip`, {
+        headers: getHeaders(),
+      });
+
+      const equippedIds = Object.values(
+        currentlyEquippedRes.data.equipment || {}
+      )
+        .filter((item) => item && item.id)
+        .map((item) => item.id);
+
+      const normalizedEquipments = (equipRes.data.equipment || []).map((e) => ({
+        ...e,
+        name: e.weapon_name || e.name,
+        fullDurability: e.max_durability,
+        status: equippedIds.includes(e.id) ? "已裝備" : "未裝備",
+      }));
+
+      const normalizedItems = (invRes.data.items || []).map((item) => ({
+        ...item,
+        id: item.id || item.item_id,
+        item_id: item.item_id || item.id,
+        name: item.name || item.item_name || `道具(${item.item_id || item.id})`,
+      }));
+
+      return {
+        items: normalizedItems,
+        mines: normalizedItems,
+        equipments: normalizedEquipments,
+      };
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
   };
 
-  // { equipments:[], skills:[] }
   this.huntInfo = async function () {
-    return await axios
-      .get(`${baseurl}/hunt/info`, {
-        headers: {
-          token: this.token,
-        },
-      })
-      .then((response) => {
-        let info = response.data;
-        return info;
-      })
-      .catch((error) => {
-        console.log(error);
-        return false;
+    try {
+      const res = await axios.get(`${baseurl}/battles/info`, {
+        headers: getHeaders(),
       });
+      return res.data;
+    } catch (error) {
+      console.log(error);
+      return false;
+    }
   };
 
-  // input {equipmentName: "", selected: [{id: , quantity: }], type: "dagger"}
   this.forge = async function (payload) {
-    return await axios
-      .post(`${baseurl}/forge`, payload, {
-        headers: {
-          token: this.token,
-        },
-      })
-      .then((response) => {
-        if (response.status == 200) {
-          let profile = response.data.profile;
-          return profile;
-        } else {
-          return false;
-        }
-      })
-      .catch((error) => {
-        console.log(error);
-        return false;
+    try {
+      const res = await axios.post(`${baseurl}/forge/craft`, payload, {
+        headers: getHeaders(),
       });
+      if (res.status == 200) {
+        return this.getProfile();
+      } else {
+        return false;
+      }
+    } catch (error) {
+      console.log(error);
+      return false;
+    }
+  };
+
+  this.getForgeRecipes = async function () {
+    try {
+      const res = await axios.get(`${baseurl}/forge/recipes`, {
+        headers: getHeaders(),
+      });
+      return res.data;
+    } catch (error) {
+      console.error("getForgeRecipes error:", error);
+      return false;
+    }
   };
 
   this.forgeComplete = async function () {
-    return await axios
-      .post(
+    try {
+      await axios.post(
         `${baseurl}/forge/complete`,
         {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let profile = response.data.profile;
-        return profile;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+        { headers: getHeaders() }
+      );
+      return this.getProfile();
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
   this.recycle = async function (id) {
-    return await axios
-      .post(
-        `${baseurl}/equipment/${id}/recycle`,
+    try {
+      await axios.post(
+        `${baseurl}/forge/recycle/${id}`,
         {},
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let equipments = response.data.equipments;
-        return equipments;
-      })
-      .catch((error) => {
-        console.log(error);
-        return error;
-      });
+        { headers: getHeaders() }
+      );
+      const itemsData = await this.item();
+      return itemsData.equipments;
+    } catch (error) {
+      console.log(error);
+      return error;
+    }
   };
 
-  // input {quantity: }
-  this.eatMedicine = async function (id, quantity) {
-    return await axios
-      .post(
-        `${baseurl}/items/${id}/use`,
-        { quantity: quantity },
-        {
-          headers: {
-            token: this.token,
-          },
-        }
-      )
-      .then((response) => {
-        let data = response.data;
-        return data;
-      })
-      .catch((error) => {
-        console.log(error);
-        return false;
+  this.eatMedicine = async function (id) {
+    try {
+      await axios.post(
+        `${baseurl}/inventory/use/${id}`,
+        {},
+        { headers: getHeaders() }
+      );
+      const profile = await this.getProfile();
+      const itemsData = await this.item();
+      return { profile, items: itemsData.items };
+    } catch (error) {
+      console.log(error);
+      return false;
+    }
+  };
+
+  this.getMineStatus = async function () {
+    try {
+      const res = await axios.get(`${baseurl}/town/mine/status`, {
+        headers: getHeaders(),
       });
+      return res.data;
+    } catch (error) {
+      console.error("getMineStatus error:", error);
+      return false;
+    }
+  };
+
+  this.startMining = async function (zoneKey) {
+    try {
+      const res = await axios.post(
+        `${baseurl}/town/mine/start`,
+        { zone: zoneKey },
+        { headers: getHeaders() }
+      );
+      return res.data;
+    } catch (error) {
+      console.error("startMining error:", error);
+      return false;
+    }
+  };
+
+  this.collectMine = async function () {
+    try {
+      const res = await axios.post(
+        `${baseurl}/town/mine/collect`,
+        {},
+        { headers: getHeaders() }
+      );
+      return res.data;
+    } catch (error) {
+      console.error("collectMine error:", error);
+      return false;
+    }
   };
 }
 
