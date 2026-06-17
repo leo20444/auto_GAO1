@@ -394,10 +394,40 @@ function user(inputToken) {
         .filter((item) => item && item.id)
         .map((item) => item.id);
 
+      // 根據 tags / hand_type 映射舊版 typeName，供 weaponChecker 分類武器/防具使用
+      const tagToTypeName = {
+        Dagger: "短刀",
+        Sword: "單手劍",
+        Rapier: "細劍",
+        Mace: "單手錘",
+        Shield: "盾牌",
+        GreatAxe: "雙手斧",
+        GreatSword: "雙手劍",
+        Katana: "太刀",
+        Spear: "長槍",
+        Coat: "大衣",
+        Armor: "盔甲",
+      };
+
+      const resolveTypeName = (e) => {
+        // 優先用 tags 第一個 tag 映射
+        if (e.tags && e.tags.length > 0) {
+          for (const tag of e.tags) {
+            if (tagToTypeName[tag]) return tagToTypeName[tag];
+          }
+        }
+        // 次之用 hand_type 判斷
+        if (e.hand_type === "two_hand") return "雙手劍";
+        if (e.hand_type === "one_hand") return "單手劍";
+        // 預設視為武器
+        return "單手劍";
+      };
+
       const normalizedEquipments = (equipRes.data.equipment || []).map((e) => ({
         ...e,
         name: e.weapon_name || e.name,
         fullDurability: e.max_durability,
+        typeName: e.typeName || resolveTypeName(e),
         status: equippedIds.includes(e.id) ? "已裝備" : "未裝備",
       }));
 
