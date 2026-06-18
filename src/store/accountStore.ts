@@ -52,6 +52,10 @@ export interface Account {
           maxFloor: number;
           minDurability: number;
           allowEmptyHanded: boolean;
+          hasExternalMembers?: boolean;
+          ignoreMemberStatus?: boolean;
+          stopAtBoss?: boolean;
+          deathPolicy?: "rerun" | "idle";
         };
       };
       equipmentCheckTag: boolean;
@@ -233,6 +237,12 @@ function addAccount(token: string) {
             minDurability: savedSetting.setting?.partyMode?.minDurability ?? 10,
             allowEmptyHanded:
               savedSetting.setting?.partyMode?.allowEmptyHanded ?? false,
+            hasExternalMembers:
+              savedSetting.setting?.partyMode?.hasExternalMembers ?? false,
+            ignoreMemberStatus:
+              savedSetting.setting?.partyMode?.ignoreMemberStatus ?? false,
+            stopAtBoss: savedSetting.setting?.partyMode?.stopAtBoss ?? false,
+            deathPolicy: savedSetting.setting?.partyMode?.deathPolicy ?? "idle",
           },
         },
         equipmentCheckTag: savedSetting.setting?.equipmentCheckTag ?? true,
@@ -330,7 +340,7 @@ function addLog(
       return;
     }
     acc.automation.battle.logs.push({ time, m: message });
-    while (acc.automation.battle.logs.length > 1) {
+    while (acc.automation.battle.logs.length > 10) {
       acc.automation.battle.logs.shift();
     }
   } else {
@@ -431,6 +441,56 @@ async function startBattle(token: string) {
           continue;
         }
 
+        // 1.8 隊員跟隨撤退檢測 (非孤狼、回城重跑模式，且有託管隊友死亡或隊長已回村)
+        const pMode = acc.automation.battle.setting.partyMode;
+        if (
+          pMode &&
+          pMode.enabled &&
+          !pMode.isLeader &&
+          !pMode.ignoreMemberStatus &&
+          pMode.deathPolicy === "rerun"
+        ) {
+          const hasDeadMember = accounts.some((a) => {
+            const aParty = a.automation?.battle?.setting?.partyMode;
+            return (
+              aParty &&
+              aParty.enabled &&
+              a.automation.battle.setting.map ===
+                acc.automation.battle.setting.map &&
+              (a.profile.actionStatus === "重生" || a.profile.hp <= 0)
+            );
+          });
+          const leaderAcc = accounts.find((a) => {
+            const aParty = a.automation?.battle?.setting?.partyMode;
+            return (
+              aParty &&
+              aParty.enabled &&
+              aParty.isLeader &&
+              a.automation.battle.setting.map ===
+                acc.automation.battle.setting.map
+            );
+          });
+          const isLeaderInTown =
+            leaderAcc && leaderAcc.profile.zoneName === "起始之鎮";
+
+          if (
+            acc.profile.zoneName !== "起始之鎮" &&
+            (hasDeadMember || isLeaderInTown)
+          ) {
+            addLog(
+              acc,
+              "battle",
+              `[組隊撤退] 偵測到隊友死亡或隊長已回村，隊員跟隨撤退回村！`
+            );
+            const moveRes = await acc.userObj.move(0);
+            if (moveRes && !moveRes.error) {
+              safeUpdateProfile(acc, moveRes);
+            }
+            await sleep(11000); // 移動冷卻
+            continue;
+          }
+        }
+
         const itemsRes = await acc.userObj.item();
         if (itemsRes) {
           acc.items.equipments = itemsRes.equipments || [];
@@ -473,7 +533,8 @@ async function startBattle(token: string) {
           acc.automation.battle.equipmentCheckTag,
           myWeaponChecker,
           acc.automation.battle.medicineCheckTag,
-          acc.automation.battle.medicineSetting
+          acc.automation.battle.medicineSetting,
+          accounts
         );
 
         // 4. 執行檢查 (HP, SP, 地圖, 補品, 裝備)
@@ -503,338 +564,440 @@ async function startBattle(token: string) {
           } else {
             let proceedWithBattle = true;
 
-            if (pMode && pMode.enabled && pMode.isLeader) {
-              // 1. 層數上限判定與帶隊回城落地確認
-              const maxFloor = pMode.maxFloor || 0;
-              if (maxFloor > 0 && acc.profile.huntStage >= maxFloor) {
-                addLog(
-                  acc,
-                  "battle",
-                  `[組隊模式] 已達隊伍層數上限 (${acc.profile.huntStage}F >= ${maxFloor}F)，帶隊回城並停止自動戰鬥！`
-                );
+            if (pMode && pMode.enabled) {
+              if (pMode.isLeader) {
+                // 0.5 王關停留判定
+                if (pMode.stopAtBoss) {
+                  const bossFloors: { [key: string]: number } = {
+                    大草原: 30,
+                    猛牛園: 25,
+                    兒童樂園: 18,
+                    蘑菇園: 24,
+                    圓明園: 20,
+                  };
+                  const currentMap = acc.profile.zoneName;
+                  const bossFloor = bossFloors[currentMap];
+                  if (bossFloor && acc.profile.huntStage === bossFloor) {
+                    addLog(
+                      acc,
+                      "battle",
+                      `[王關停留] 已抵達王關樓層 (${bossFloor}F)，原地暫停自動戰鬥以便手動挑戰！`
+                    );
 
-                // 找到所有屬於該隊伍的我方託管帳號 (包含隊長自己)
+                    // 取得託管的組員，全部關閉自動戰鬥
+                    const partyStatus = await acc.userObj.getPartyStatus();
+                    const partyMemberIds = new Set<number>();
+                    if (
+                      partyStatus &&
+                      partyStatus.party &&
+                      partyStatus.party.members
+                    ) {
+                      partyStatus.party.members.forEach((m: any) => {
+                        partyMemberIds.add(Number(m.user_id));
+                      });
+                    }
+                    if (acc.profile.id)
+                      partyMemberIds.add(Number(acc.profile.id));
+                    if (acc.profile.userId)
+                      partyMemberIds.add(Number(acc.profile.userId));
+                    if (acc.profile.user_id)
+                      partyMemberIds.add(Number(acc.profile.user_id));
+
+                    const managedPartyAccs = accounts.filter(
+                      (a) =>
+                        (a.profile.id &&
+                          partyMemberIds.has(Number(a.profile.id))) ||
+                        (a.profile.userId &&
+                          partyMemberIds.has(Number(a.profile.userId))) ||
+                        (a.profile.user_id &&
+                          partyMemberIds.has(Number(a.profile.user_id)))
+                    );
+
+                    for (const memberAcc of managedPartyAccs) {
+                      memberAcc.automation.battle.running = false;
+                      addLog(
+                        memberAcc,
+                        "battle",
+                        `[王關停留] 隊長已在王關暫停自動戰鬥，組員原地暫停。`
+                      );
+                    }
+                    break;
+                  }
+                }
+
+                // 1. 層數上限判定與帶隊回城落地確認
+                const maxFloor = pMode.maxFloor || 0;
+                if (maxFloor > 0 && acc.profile.huntStage >= maxFloor) {
+                  addLog(
+                    acc,
+                    "battle",
+                    `[組隊模式] 已達隊伍層數上限 (${acc.profile.huntStage}F >= ${maxFloor}F)，帶隊回城並停止自動戰鬥！`
+                  );
+
+                  // 找到所有屬於該隊伍的我方託管帳號 (包含隊長自己)
+                  const partyStatus = await acc.userObj.getPartyStatus();
+                  const partyMemberIds = new Set<number>();
+                  if (
+                    partyStatus &&
+                    partyStatus.party &&
+                    partyStatus.party.members
+                  ) {
+                    partyStatus.party.members.forEach((m: any) => {
+                      partyMemberIds.add(Number(m.user_id));
+                    });
+                  }
+                  if (acc.profile.id)
+                    partyMemberIds.add(Number(acc.profile.id));
+                  if (acc.profile.userId)
+                    partyMemberIds.add(Number(acc.profile.userId));
+                  if (acc.profile.user_id)
+                    partyMemberIds.add(Number(acc.profile.user_id));
+
+                  const managedPartyAccs = accounts.filter(
+                    (a) =>
+                      (a.profile.id &&
+                        partyMemberIds.has(Number(a.profile.id))) ||
+                      (a.profile.userId &&
+                        partyMemberIds.has(Number(a.profile.userId))) ||
+                      (a.profile.user_id &&
+                        partyMemberIds.has(Number(a.profile.user_id)))
+                  );
+
+                  // 隊長帶頭 move(0)
+                  let leaderNewProfile: any = null;
+                  try {
+                    leaderNewProfile = await acc.userObj.move(0);
+                    if (leaderNewProfile && !leaderNewProfile.error) {
+                      safeUpdateProfile(acc, leaderNewProfile);
+                    }
+                  } catch (e) {
+                    console.error("[組隊回城] 隊長發起移動失敗:", e);
+                  }
+
+                  // 更新所有隊友 profile 狀態
+                  for (const memberAcc of managedPartyAccs) {
+                    if (
+                      Number(memberAcc.profile.id) !== Number(acc.profile.id)
+                    ) {
+                      try {
+                        await refreshAccountState(memberAcc);
+                      } catch (e) {
+                        console.error(
+                          `[組隊回城] 更新隊員 ${memberAcc.profile.name} 狀態失敗:`,
+                          e
+                        );
+                      }
+                    }
+                  }
+
+                  // 計算移動剩餘時間
+                  let waitTime = 11000;
+                  if (acc.profile.actionStatus === "移動") {
+                    const offset = acc.profile.serverOffsetMs || 0;
+                    const adjustedNow = moment().add(offset, "ms");
+                    const remainingMs = moment(acc.profile.actionStart).diff(
+                      adjustedNow
+                    );
+                    waitTime = Math.min(
+                      300000,
+                      Math.max(11000, remainingMs + 2000)
+                    );
+                    console.log(
+                      `[組隊回城] ${acc.profile.name} 移動剩餘時間: ${Math.ceil(
+                        remainingMs / 1000
+                      )} 秒 | 全員對齊等待: ${Math.ceil(waitTime / 1000)} 秒`
+                    );
+                  }
+
+                  // 等待落地時間
+                  await sleep(waitTime);
+
+                  // 全員落地確認 (帶重試機制)
+                  await Promise.all(
+                    managedPartyAccs.map(async (memberAcc) => {
+                      let success = false;
+                      let retries = 5;
+                      while (retries > 0 && !success) {
+                        try {
+                          addLog(
+                            memberAcc,
+                            "battle",
+                            `[組隊回城] 發送抵達確認 (moveComplete)，剩餘重試次數: ${retries}...`
+                          );
+                          const completedProfile =
+                            await memberAcc.userObj.moveComplete();
+                          if (completedProfile && !completedProfile.error) {
+                            safeUpdateProfile(memberAcc, completedProfile);
+                            addLog(
+                              memberAcc,
+                              "battle",
+                              `[組隊回城] 已成功抵達起始之鎮！`
+                            );
+                            success = true;
+                          } else {
+                            addLog(
+                              memberAcc,
+                              "battle",
+                              `[組隊回城] 抵達確認失敗：${
+                                completedProfile?.message || "未知錯誤"
+                              }，將於 5 秒後重試...`
+                            );
+                            retries--;
+                            if (retries > 0) await sleep(5000);
+                          }
+                        } catch (e) {
+                          console.error(
+                            `[組隊回城] 隊員 ${memberAcc.profile.name} 落地確認出錯:`,
+                            e
+                          );
+                          retries--;
+                          if (retries > 0) await sleep(5000);
+                        }
+                      }
+                      if (!success) {
+                        addLog(
+                          memberAcc,
+                          "battle",
+                          `[警告] 隊員 ${memberAcc.profile.name} 最終未能成功落地，請手動確認！`
+                        );
+                      }
+                      memberAcc.automation.battle.running = false;
+                    })
+                  );
+
+                  break;
+                }
+
+                // 2. 獲取並巡查隊伍狀態
+                let allMembersReady = true;
                 const partyStatus = await acc.userObj.getPartyStatus();
-                const partyMemberIds = new Set<number>();
                 if (
                   partyStatus &&
                   partyStatus.party &&
                   partyStatus.party.members
                 ) {
-                  partyStatus.party.members.forEach((m: any) => {
-                    partyMemberIds.add(Number(m.user_id));
-                  });
-                }
-                if (acc.profile.id) partyMemberIds.add(Number(acc.profile.id));
-                if (acc.profile.userId)
-                  partyMemberIds.add(Number(acc.profile.userId));
-                if (acc.profile.user_id)
-                  partyMemberIds.add(Number(acc.profile.user_id));
+                  const members = partyStatus.party.members;
 
-                const managedPartyAccs = accounts.filter(
-                  (a) =>
-                    (a.profile.id &&
-                      partyMemberIds.has(Number(a.profile.id))) ||
-                    (a.profile.userId &&
-                      partyMemberIds.has(Number(a.profile.userId))) ||
-                    (a.profile.user_id &&
-                      partyMemberIds.has(Number(a.profile.user_id)))
-                );
+                  for (const member of members) {
+                    console.log(
+                      `[組隊成員比對偵錯] 檢查隊友: ${member.character_name} (user_id: ${member.user_id}) | 隊長 ID: ${acc.profile.id} / ${acc.profile.userId} / ${acc.profile.user_id} | 託管帳號群:`,
+                      accounts.map((a) => ({
+                        name: a.profile.nickname || a.profile.name,
+                        id: a.profile.id,
+                        userId: a.profile.userId,
+                        user_id: a.profile.user_id,
+                      }))
+                    );
 
-                // 隊長帶頭 move(0)
-                let leaderNewProfile: any = null;
-                try {
-                  leaderNewProfile = await acc.userObj.move(0);
-                  if (leaderNewProfile && !leaderNewProfile.error) {
-                    safeUpdateProfile(acc, leaderNewProfile);
-                  }
-                } catch (e) {
-                  console.error("[組隊回城] 隊長發起移動失敗:", e);
-                }
-
-                // 更新所有隊友 profile 狀態
-                for (const memberAcc of managedPartyAccs) {
-                  if (Number(memberAcc.profile.id) !== Number(acc.profile.id)) {
-                    try {
-                      await refreshAccountState(memberAcc);
-                    } catch (e) {
-                      console.error(
-                        `[組隊回城] 更新隊員 ${memberAcc.profile.name} 狀態失敗:`,
-                        e
+                    // 排除隊長自己
+                    if (
+                      (acc.profile.id &&
+                        Number(member.user_id) === Number(acc.profile.id)) ||
+                      (acc.profile.userId &&
+                        Number(member.user_id) ===
+                          Number(acc.profile.userId)) ||
+                      (acc.profile.user_id &&
+                        Number(member.user_id) === Number(acc.profile.user_id))
+                    ) {
+                      console.log(
+                        `[組隊成員比對偵錯] ${member.character_name} 是隊長自己，跳過。`
                       );
+                      continue;
                     }
-                  }
-                }
 
-                // 計算移動剩餘時間
-                let waitTime = 11000;
-                if (acc.profile.actionStatus === "移動") {
-                  const offset = acc.profile.serverOffsetMs || 0;
-                  const adjustedNow = moment().add(offset, "ms");
-                  const remainingMs = moment(acc.profile.actionStart).diff(
-                    adjustedNow
-                  );
-                  waitTime = Math.min(
-                    300000,
-                    Math.max(11000, remainingMs + 2000)
-                  );
-                  console.log(
-                    `[組隊回城] ${acc.profile.name} 移動剩餘時間: ${Math.ceil(
-                      remainingMs / 1000
-                    )} 秒 | 全員對齊等待: ${Math.ceil(waitTime / 1000)} 秒`
-                  );
-                }
-
-                // 等待落地時間
-                await sleep(waitTime);
-
-                // 全員落地確認 (帶重試機制)
-                await Promise.all(
-                  managedPartyAccs.map(async (memberAcc) => {
-                    let success = false;
-                    let retries = 5;
-                    while (retries > 0 && !success) {
-                      try {
-                        addLog(
-                          memberAcc,
-                          "battle",
-                          `[組隊回城] 發送抵達確認 (moveComplete)，剩餘重試次數: ${retries}...`
-                        );
-                        const completedProfile =
-                          await memberAcc.userObj.moveComplete();
-                        if (completedProfile && !completedProfile.error) {
-                          safeUpdateProfile(memberAcc, completedProfile);
+                    // 尋找我方託管帳號
+                    const memberAcc = accounts.find(
+                      (a) =>
+                        (a.profile.id &&
+                          Number(a.profile.id) === Number(member.user_id)) ||
+                        (a.profile.userId &&
+                          Number(a.profile.userId) ===
+                            Number(member.user_id)) ||
+                        (a.profile.user_id &&
+                          Number(a.profile.user_id) === Number(member.user_id))
+                    );
+                    if (memberAcc) {
+                      // A. 我方託管組員
+                      // 先檢測是否死亡
+                      const isMemberDead =
+                        memberAcc.profile.actionStatus === "重生" ||
+                        memberAcc.profile.hp <= 0;
+                      if (isMemberDead && !pMode.ignoreMemberStatus) {
+                        if (pMode.deathPolicy === "rerun") {
                           addLog(
-                            memberAcc,
+                            acc,
                             "battle",
-                            `[組隊回城] 已成功抵達起始之鎮！`
+                            `[組隊撤退] 偵測到隊友 ${member.character_name} 死亡，全員退回起始之鎮重整！`
                           );
-                          success = true;
+                          const leaderNewProfile = await acc.userObj.move(0);
+                          if (leaderNewProfile && !leaderNewProfile.error) {
+                            safeUpdateProfile(acc, leaderNewProfile);
+                          }
+                          allMembersReady = false;
+                          break;
                         } else {
                           addLog(
-                            memberAcc,
+                            acc,
                             "battle",
-                            `[組隊回城] 抵達確認失敗：${
-                              completedProfile?.message || "未知錯誤"
-                            }，將於 5 秒後重試...`
+                            `[組隊等待] 隊員 ${member.character_name} 死亡，隊伍在原地暫停等待其歸隊...`
                           );
-                          retries--;
-                          if (retries > 0) await sleep(5000);
+                          allMembersReady = false;
                         }
-                      } catch (e) {
-                        console.error(
-                          `[組隊回城] 隊員 ${memberAcc.profile.name} 落地確認出錯:`,
-                          e
-                        );
-                        retries--;
-                        if (retries > 0) await sleep(5000);
                       }
-                    }
-                    if (!success) {
-                      addLog(
-                        memberAcc,
-                        "battle",
-                        `[警告] 隊員 ${memberAcc.profile.name} 最終未能成功落地，請手動確認！`
-                      );
-                    }
-                    memberAcc.automation.battle.running = false;
-                  })
-                );
 
-                break;
-              }
-
-              // 2. 獲取並巡查隊伍狀態
-              const partyStatus = await acc.userObj.getPartyStatus();
-              if (
-                partyStatus &&
-                partyStatus.party &&
-                partyStatus.party.members
-              ) {
-                let allMembersReady = true;
-                const members = partyStatus.party.members;
-
-                for (const member of members) {
-                  console.log(
-                    `[組隊成員比對偵錯] 檢查隊友: ${member.character_name} (user_id: ${member.user_id}) | 隊長 ID: ${acc.profile.id} / ${acc.profile.userId} / ${acc.profile.user_id} | 託管帳號群:`,
-                    accounts.map((a) => ({
-                      name: a.profile.nickname || a.profile.name,
-                      id: a.profile.id,
-                      userId: a.profile.userId,
-                      user_id: a.profile.user_id,
-                    }))
-                  );
-
-                  // 排除隊長自己
-                  if (
-                    (acc.profile.id &&
-                      Number(member.user_id) === Number(acc.profile.id)) ||
-                    (acc.profile.userId &&
-                      Number(member.user_id) === Number(acc.profile.userId)) ||
-                    (acc.profile.user_id &&
-                      Number(member.user_id) === Number(acc.profile.user_id))
-                  ) {
-                    console.log(
-                      `[組隊成員比對偵錯] ${member.character_name} 是隊長自己，跳過。`
-                    );
-                    continue;
-                  }
-
-                  // 尋找我方託管帳號
-                  const memberAcc = accounts.find(
-                    (a) =>
-                      (a.profile.id &&
-                        Number(a.profile.id) === Number(member.user_id)) ||
-                      (a.profile.userId &&
-                        Number(a.profile.userId) === Number(member.user_id)) ||
-                      (a.profile.user_id &&
-                        Number(a.profile.user_id) === Number(member.user_id))
-                  );
-                  if (memberAcc) {
-                    // A. 我方託管組員
-                    // 檢查忙碌狀態 (如果組員正在移動、休息、重生，隊長必須等待)
-                    const isMemberBusy =
-                      memberAcc.profile.actionStatus !== "空閒" &&
-                      memberAcc.profile.actionStatus !== "戰鬥";
-                    if (isMemberBusy) {
-                      addLog(
-                        acc,
-                        "battle",
-                        `[組隊等待] 組員 ${member.character_name} 目前忙碌中 (${memberAcc.profile.actionStatus})，等待其完成...`
-                      );
-                      allMembersReady = false;
-                    }
-
-                    // 檢查所在區域是否與隊長一致
-                    const isSameZone =
-                      memberAcc.profile.zoneName === acc.profile.zoneName;
-                    if (!isSameZone) {
-                      addLog(
-                        acc,
-                        "battle",
-                        `[組隊等待] 組員 ${member.character_name} 目前在 ${memberAcc.profile.zoneName}，與隊長所在區域 (${acc.profile.zoneName}) 不一致，等待其抵達...`
-                      );
-                      allMembersReady = false;
-                    }
-
-                    const memberHpLimit =
-                      memberAcc.automation.battle.setting.hp || 100;
-                    const memberSpLimit =
-                      memberAcc.automation.battle.setting.sp || 150;
-
-                    const isMemberHpReady =
-                      member.hp >= member.max_hp || member.hp > memberHpLimit;
-
-                    const isMemberSpReady =
-                      member.mp >= member.max_mp || member.mp > memberSpLimit;
-
-                    console.log(
-                      `[組隊巡檢-託管隊員] ${member.character_name} 狀態: HP=${member.hp}/${member.max_hp} (設定門檻:${memberHpLimit}), SP=${member.mp}/${member.max_mp} (設定門檻:${memberSpLimit}) | HP 就緒: ${isMemberHpReady}, SP 就緒: ${isMemberSpReady}`
-                    );
-
-                    if (!isMemberHpReady || !isMemberSpReady) {
-                      addLog(
-                        acc,
-                        "battle",
-                        `[組隊等待] 組員 ${member.character_name} HP/SP 不足 (HP: ${member.hp}/${member.max_hp}, SP: ${member.mp}/${member.max_mp})，等待其恢復...`
-                      );
-                      allMembersReady = false;
-                    }
-
-                    // 最低耐久度與空手檢查
-                    const minDur = pMode.minDurability || 10;
-                    const memberEquips = memberAcc.items.equipments || [];
-                    const equippedWeapons = memberEquips.filter(
-                      (w: any) => w.status === "已裝備"
-                    );
-                    const weaponTypes = [
-                      "短刀",
-                      "單手劍",
-                      "細劍",
-                      "單手錘",
-                      "盾牌",
-                      "雙手斧",
-                      "雙手劍",
-                      "太刀",
-                      "長槍",
-                    ];
-                    const equippedWeapon = equippedWeapons.find((w: any) =>
-                      weaponTypes.includes(w.typeName)
-                    );
-
-                    if (equippedWeapon) {
-                      const weaponReady = equippedWeapon.durability >= minDur;
-                      console.log(
-                        `[組隊巡檢-託管隊員] ${member.character_name} 裝備武器: ${equippedWeapon.name} (耐久:${equippedWeapon.durability}, 門檻:${minDur}) | 武器就緒: ${weaponReady}`
-                      );
-                      if (!weaponReady) {
+                      // 檢查忙碌狀態 (如果組員正在移動、休息、重生，隊長必須等待)
+                      const isMemberBusy =
+                        memberAcc.profile.actionStatus !== "空閒" &&
+                        memberAcc.profile.actionStatus !== "戰鬥";
+                      if (isMemberBusy) {
                         addLog(
                           acc,
                           "battle",
-                          `[組隊等待] 組員 ${member.character_name} 武器 ${equippedWeapon.name} 耐久低於統一門檻 (${equippedWeapon.durability} < ${minDur})，等待更換...`
+                          `[組隊等待] 組員 ${member.character_name} 目前忙碌中 (${memberAcc.profile.actionStatus})，等待其完成...`
                         );
                         allMembersReady = false;
+                      }
+
+                      // 檢查所在區域是否與隊長一致
+                      const isSameZone =
+                        memberAcc.profile.zoneName === acc.profile.zoneName;
+                      if (!isSameZone) {
+                        addLog(
+                          acc,
+                          "battle",
+                          `[組隊等待] 組員 ${member.character_name} 目前在 ${memberAcc.profile.zoneName}，與隊長所在區域 (${acc.profile.zoneName}) 不一致，等待其抵達...`
+                        );
+                        allMembersReady = false;
+                      }
+
+                      const memberHpLimit =
+                        memberAcc.automation.battle.setting.hp || 100;
+                      const memberSpLimit =
+                        memberAcc.automation.battle.setting.sp || 150;
+
+                      const isMemberHpReady =
+                        member.hp >= member.max_hp || member.hp > memberHpLimit;
+
+                      const isMemberSpReady =
+                        member.mp >= member.max_mp || member.mp > memberSpLimit;
+
+                      console.log(
+                        `[組隊巡檢-託管隊員] ${member.character_name} 狀態: HP=${member.hp}/${member.max_hp} (設定門檻:${memberHpLimit}), SP=${member.mp}/${member.max_mp} (設定門檻:${memberSpLimit}) | HP 就緒: ${isMemberHpReady}, SP 就緒: ${isMemberSpReady}`
+                      );
+
+                      if (!isMemberHpReady || !isMemberSpReady) {
+                        addLog(
+                          acc,
+                          "battle",
+                          `[組隊等待] 組員 ${member.character_name} HP/SP 不足 (HP: ${member.hp}/${member.max_hp}, SP: ${member.mp}/${member.max_mp})，等待其恢復...`
+                        );
+                        allMembersReady = false;
+                      }
+
+                      // 最低耐久度與空手檢查
+                      const minDur = pMode.minDurability || 10;
+                      const memberEquips = memberAcc.items.equipments || [];
+                      const equippedWeapons = memberEquips.filter(
+                        (w: any) => w.status === "已裝備"
+                      );
+                      const weaponTypes = [
+                        "短刀",
+                        "單手劍",
+                        "細劍",
+                        "單手錘",
+                        "盾牌",
+                        "雙手斧",
+                        "雙手劍",
+                        "太刀",
+                        "長槍",
+                      ];
+                      const equippedWeapon = equippedWeapons.find((w: any) =>
+                        weaponTypes.includes(w.typeName)
+                      );
+
+                      if (equippedWeapon) {
+                        const weaponReady = equippedWeapon.durability >= minDur;
+                        console.log(
+                          `[組隊巡檢-託管隊員] ${member.character_name} 裝備武器: ${equippedWeapon.name} (耐久:${equippedWeapon.durability}, 門檻:${minDur}) | 武器就緒: ${weaponReady}`
+                        );
+                        if (!weaponReady) {
+                          addLog(
+                            acc,
+                            "battle",
+                            `[組隊等待] 組員 ${member.character_name} 武器 ${equippedWeapon.name} 耐久低於統一門檻 (${equippedWeapon.durability} < ${minDur})，等待更換...`
+                          );
+                          allMembersReady = false;
+                        }
+                      } else {
+                        const emptyHandedAllowed = pMode.allowEmptyHanded;
+                        console.log(
+                          `[組隊巡檢-託管隊員] ${member.character_name} 目前空手 | 允許空手: ${emptyHandedAllowed}`
+                        );
+                        if (!emptyHandedAllowed) {
+                          addLog(
+                            acc,
+                            "battle",
+                            `[組隊等待] 組員 ${member.character_name} 目前空手（不允許空手），等待其裝備武器...`
+                          );
+                          allMembersReady = false;
+                        }
                       }
                     } else {
-                      const emptyHandedAllowed = pMode.allowEmptyHanded;
-                      console.log(
-                        `[組隊巡檢-託管隊員] ${member.character_name} 目前空手 | 允許空手: ${emptyHandedAllowed}`
-                      );
-                      if (!emptyHandedAllowed) {
-                        addLog(
-                          acc,
-                          "battle",
-                          `[組隊等待] 組員 ${member.character_name} 目前空手（不允許空手），等待其裝備武器...`
-                        );
-                        allMembersReady = false;
-                      }
-                    }
-                  } else {
-                    // B. 隊外玩家 (非我方託管)
-                    // 檢查忙碌狀態 (如果組員正在移動、休息，隊長必須等待)
-                    const isExternalBusy =
-                      member.tower_move_ends_at !== null ||
-                      member.rest_started_at !== null;
-                    if (isExternalBusy) {
-                      addLog(
-                        acc,
-                        "battle",
-                        `[組隊等待] 隊外組員 ${
-                          member.character_name
-                        } 目前忙碌中 (${
-                          member.tower_move_ends_at ? "移動中" : "休息中"
-                        })，等待其完成...`
-                      );
-                      allMembersReady = false;
-                    }
+                      // B. 隊外玩家 (非我方託管)
+                      if (pMode.hasExternalMembers) {
+                        // 檢查忙碌狀態 (如果組員正在移動、休息，隊長必須等待)
+                        const isExternalBusy =
+                          member.tower_move_ends_at !== null ||
+                          member.rest_started_at !== null;
+                        if (isExternalBusy) {
+                          addLog(
+                            acc,
+                            "battle",
+                            `[組隊等待] 隊外組員 ${
+                              member.character_name
+                            } 目前忙碌中 (${
+                              member.tower_move_ends_at ? "移動中" : "休息中"
+                            })，等待其完成...`
+                          );
+                          allMembersReady = false;
+                        }
 
-                    const hpPercent = member.max_hp
-                      ? member.hp / member.max_hp
-                      : 1;
-                    const mpPercent = member.max_mp
-                      ? member.mp / member.max_mp
-                      : 1;
-                    const externalReady = hpPercent >= 0.5 && mpPercent >= 0.3;
-                    console.log(
-                      `[組隊巡檢-外部隊員] ${
-                        member.character_name
-                      } 狀態: HP=${Math.round(
-                        hpPercent * 100
-                      )}%, SP=${Math.round(
-                        mpPercent * 100
-                      )}% | 狀態就緒: ${externalReady}`
-                    );
-                    if (!externalReady) {
-                      addLog(
-                        acc,
-                        "battle",
-                        `[組隊等待] 隊外組員 ${
-                          member.character_name
-                        } 狀態不足 (HP: ${Math.round(
-                          hpPercent * 100
-                        )}%, SP: ${Math.round(mpPercent * 100)}%)，等待恢復...`
-                      );
-                      allMembersReady = false;
+                        const hpPercent = member.max_hp
+                          ? member.hp / member.max_hp
+                          : 1;
+                        const mpPercent = member.max_mp
+                          ? member.mp / member.max_mp
+                          : 1;
+                        const externalReady =
+                          hpPercent >= 0.5 && mpPercent >= 0.3;
+                        console.log(
+                          `[組隊巡檢-外部隊員] ${
+                            member.character_name
+                          } 狀態: HP=${Math.round(
+                            hpPercent * 100
+                          )}%, SP=${Math.round(
+                            mpPercent * 100
+                          )}% | 狀態就緒: ${externalReady}`
+                        );
+                        if (!externalReady) {
+                          addLog(
+                            acc,
+                            "battle",
+                            `[組隊等待] 隊外組員 ${
+                              member.character_name
+                            } 狀態不足 (HP: ${Math.round(
+                              hpPercent * 100
+                            )}%, SP: ${Math.round(
+                              mpPercent * 100
+                            )}%)，等待恢復...`
+                          );
+                          allMembersReady = false;
+                        }
+                      } else {
+                        console.log(
+                          `[組隊巡檢] 發現非託管隊友 ${member.character_name}，已忽略其狀態檢查。`
+                        );
+                      }
                     }
                   }
                 }
@@ -844,10 +1007,14 @@ async function startBattle(token: string) {
                   await sleep(5000);
                   continue; // 跳出當前 logic 迴圈，等 5 秒後重新檢測
                 }
+              } else {
+                // 隊員不主動發起戰鬥/趕路
+                proceedWithBattle = false;
               }
             }
 
             if (proceedWithBattle) {
+              acc.automation.battle.timeline = null; // 每次發起戰鬥前先清空 Timeline
               const runLevel = acc.automation.battle.setting.runLevel || 0;
               const currentStage = acc.profile.huntStage || 0;
               const isRushMode =

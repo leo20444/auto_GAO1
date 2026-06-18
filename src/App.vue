@@ -3,7 +3,7 @@ import { ref, reactive } from "vue";
 import { RouterView } from "vue-router";
 import { useAccountStore } from "./store/accountStore";
 import { ElMessageBox, ElMessage } from "element-plus";
-import { Plus, User, Delete } from "@element-plus/icons-vue";
+import { Plus, Delete } from "@element-plus/icons-vue";
 
 const {
   accounts,
@@ -187,6 +187,54 @@ const handleImport = () => {
     window.location.reload();
   }, 1500);
 };
+
+const getEquippedWeapon = (acc: any) => {
+  const equips = acc.items?.equipments || [];
+  const equipped = equips.filter((e: any) => e.status === "已裝備");
+  const weaponTypes = [
+    "短刀",
+    "單手劍",
+    "細劍",
+    "單手錘",
+    "盾牌",
+    "雙手斧",
+    "雙手劍",
+    "太刀",
+    "長槍",
+  ];
+  const weapon = equipped.find((e: any) => weaponTypes.includes(e.typeName));
+  return weapon ? `${weapon.name} (${weapon.durability})` : "空手";
+};
+
+const getEquippedArmors = (acc: any) => {
+  const equips = acc.items?.equipments || [];
+  return equips.filter(
+    (e: any) =>
+      e.status === "已裝備" && (e.typeName === "大衣" || e.typeName === "盔甲")
+  );
+};
+
+const getMinArmorDurability = (armors: any[]) => {
+  if (armors.length === 0) return 0;
+  return Math.min(...armors.map((a) => a.durability));
+};
+
+const getCharacterStatus = (acc: any) => {
+  const statuses = acc.profile?.activeStatuses || [];
+  const primaryStatus = statuses[0] || acc.profile?.actionStatus || "空閒";
+  switch (primaryStatus) {
+    case "戰鬥":
+      return { text: "戰鬥", type: "danger" as const };
+    case "採礦":
+      return { text: "採集", type: "warning" as const };
+    case "休息":
+      return { text: "休息", type: "success" as const };
+    case "鍛造":
+      return { text: "製作", type: "info" as const };
+    default:
+      return { text: "空閒", type: "info" as const, effect: "plain" as const };
+  }
+};
 </script>
 
 <template>
@@ -208,19 +256,74 @@ const handleImport = () => {
             ]"
             @click="selectAccount(index)"
           >
-            <div class="account-avatar">
-              <el-avatar
-                :icon="User"
-                :size="40"
-                :style="{
-                  backgroundColor: acc.profile.avatarColor || '#409EFF',
-                }"
-              />
-            </div>
             <div class="account-info">
-              <div class="account-name">
-                {{ acc.profile.nickname || "未載入" }}
+              <div class="account-name-row">
+                <span class="account-name">{{
+                  acc.profile?.nickname || "未載入"
+                }}</span>
+                <el-tag
+                  v-if="acc.profile"
+                  :type="getCharacterStatus(acc).type"
+                  :effect="getCharacterStatus(acc).effect || 'light'"
+                  size="small"
+                  class="status-tag"
+                >
+                  {{ getCharacterStatus(acc).text }}
+                </el-tag>
               </div>
+
+              <!-- 裝備與防具懸停顯示 -->
+              <div class="account-equip-row" v-if="acc.profile">
+                <span class="equip-weapon"
+                  >🗡️ {{ getEquippedWeapon(acc) }}</span
+                >
+                <span class="equip-divider">|</span>
+
+                <el-tooltip placement="right" effect="dark" :enterable="true">
+                  <template #content>
+                    <div
+                      style="
+                        font-size: 12px;
+                        line-height: 1.6;
+                        max-height: 250px;
+                        overflow-y: auto;
+                      "
+                    >
+                      <div
+                        style="
+                          font-weight: bold;
+                          margin-bottom: 6px;
+                          border-bottom: 1px solid #4e5052;
+                          padding-bottom: 2px;
+                        "
+                      >
+                        全身防具狀態 (已裝備)
+                      </div>
+                      <div
+                        v-if="getEquippedArmors(acc).length === 0"
+                        style="color: #909399"
+                      >
+                        無裝備任何防具
+                      </div>
+                      <div
+                        v-else
+                        v-for="armor in getEquippedArmors(acc)"
+                        :key="armor.id"
+                      >
+                        [{{ armor.typeName }}] {{ armor.name }} (耐久:
+                        {{ armor.durability }})
+                      </div>
+                    </div>
+                  </template>
+                  <span class="equip-armor">
+                    🛡️ 防具 x{{ getEquippedArmors(acc).length }}
+                    <span v-if="getEquippedArmors(acc).length > 0">
+                      ({{ getMinArmorDurability(getEquippedArmors(acc)) }})
+                    </span>
+                  </span>
+                </el-tooltip>
+              </div>
+
               <div class="account-stats">
                 <el-progress
                   :percentage="
@@ -462,9 +565,56 @@ body {
 }
 
 .account-info {
-  margin-left: 12px;
+  margin-left: 0;
   flex: 1;
   overflow: hidden;
+}
+
+.account-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.status-tag {
+  font-size: 10px;
+  height: 16px;
+  padding: 0 4px;
+  line-height: 14px;
+}
+
+.account-equip-row {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #909399;
+  margin-top: 4px;
+  margin-bottom: 2px;
+  gap: 4px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.equip-weapon,
+.equip-armor {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.equip-weapon {
+  max-width: 90px;
+}
+
+.equip-armor {
+  max-width: 105px;
+}
+
+.equip-divider {
+  color: #4e5052;
+  font-size: 10px;
 }
 
 .account-name {

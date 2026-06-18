@@ -38,8 +38,25 @@
       </el-row>
 
       <!-- 執行與日誌設定 -->
+      <el-row
+        v-if="setting.partyMode.enabled && !setting.partyMode.isLeader"
+        style="margin-top: 15px"
+      >
+        <el-col :span="24">
+          <el-alert
+            title="您目前是組隊成員（隊員），執行模式與樓層關卡上限由隊長端統一主導，您的帳號將自動配合與跟隨。"
+            type="info"
+            show-icon
+            :closable="false"
+          />
+        </el-col>
+      </el-row>
+
       <el-row :gutter="20" style="margin-top: 15px" align="middle">
-        <el-col :span="6">
+        <el-col
+          :span="6"
+          v-if="!setting.partyMode.enabled || setting.partyMode.isLeader"
+        >
           <div class="input-label">執行模式</div>
           <el-radio-group
             v-model="setting.battleMode"
@@ -234,7 +251,10 @@
       </el-row>
 
       <el-row :gutter="20" style="margin-top: 20px">
-        <el-col :span="8">
+        <el-col
+          :span="8"
+          v-if="!setting.partyMode.enabled || setting.partyMode.isLeader"
+        >
           <div class="input-label">層數上限 (0為無上限)</div>
           <el-input-number
             v-model="setting.mapLevel"
@@ -243,7 +263,10 @@
             placeholder="0為無上限"
           />
         </el-col>
-        <el-col :span="8">
+        <el-col
+          :span="8"
+          v-if="!setting.partyMode.enabled || setting.partyMode.isLeader"
+        >
           <div class="input-label">趕路層數</div>
           <el-input-number
             v-model="setting.runLevel"
@@ -251,7 +274,11 @@
             style="width: 100%"
           />
         </el-col>
-        <el-col :span="8">
+        <el-col
+          :span="
+            !setting.partyMode.enabled || setting.partyMode.isLeader ? 8 : 24
+          "
+        >
           <div class="input-label">最低耐久</div>
           <el-input-number
             v-model="setting.weaponDuration"
@@ -290,6 +317,17 @@
             style="width: 100%"
             placeholder="0為無上限"
           />
+          <div
+            style="
+              font-size: 11px;
+              color: #909399;
+              margin-top: 4px;
+              line-height: 1.3;
+            "
+          >
+            ※ 抵達該層直接回村（不挑戰該層）。例如：草原王關 30F，打王前回村設
+            30，打完王關回村設 31。
+          </div>
         </el-col>
         <el-col :span="8" v-if="setting.partyMode.isLeader">
           <div class="input-label">組員最低耐久</div>
@@ -309,6 +347,61 @@
           <el-checkbox v-model="setting.partyMode.allowEmptyHanded">
             允許組員空手 (當無可用武器時)
           </el-checkbox>
+          <el-tooltip
+            content="啟用後，隊長會額外檢查並等待非我方託管的隊友就緒；未啟用時，將只巡檢我方託管的組員，避免因路人狀態不佳導致隊伍卡死。"
+            placement="top"
+          >
+            <el-checkbox
+              v-model="setting.partyMode.hasExternalMembers"
+              style="margin-left: 20px"
+            >
+              包含非託管組員 (隊外玩家)
+            </el-checkbox>
+          </el-tooltip>
+          <el-tooltip
+            content="啟用後，隊長挑戰不等待隊員。若有隊友死亡，隊員復活後在 1 樓待命，直到隊長下次重新從 1 樓爬塔時自動歸隊。"
+            placement="top"
+          >
+            <el-checkbox
+              v-model="setting.partyMode.ignoreMemberStatus"
+              style="margin-left: 20px"
+            >
+              無視隊友狀態 (孤狼帶隊)
+            </el-checkbox>
+          </el-tooltip>
+          <el-tooltip
+            content="抵達地圖王關時自動在該層暫停自動戰鬥以便手動挑戰。大草原30F、猛牛園25F、兒童樂園18F、蘑菇園24F、圓明園20F。"
+            placement="top"
+          >
+            <el-checkbox
+              v-model="setting.partyMode.stopAtBoss"
+              style="margin-left: 20px"
+            >
+              王關停留
+            </el-checkbox>
+          </el-tooltip>
+        </el-col>
+      </el-row>
+      <el-row
+        :gutter="20"
+        v-if="
+          setting.partyMode.enabled &&
+          setting.partyMode.isLeader &&
+          !setting.partyMode.ignoreMemberStatus
+        "
+        style="margin-top: 12px"
+      >
+        <el-col :span="24">
+          <div
+            class="input-label"
+            style="display: inline-block; margin-right: 15px; font-weight: bold"
+          >
+            隊友死亡回城後續行為
+          </div>
+          <el-radio-group v-model="setting.partyMode.deathPolicy">
+            <el-radio label="idle">隊伍原地暫停等待</el-radio>
+            <el-radio label="rerun">全員同步回城重跑</el-radio>
+          </el-radio-group>
         </el-col>
       </el-row>
     </el-card>
@@ -373,17 +466,29 @@
       <template #header>
         <div class="card-header-flex">
           <span>最新戰役詳細過程</span>
-          <el-button
-            size="small"
-            type="primary"
-            plain
-            @click="showTimeline = !showTimeline"
-          >
-            {{ showTimeline ? "隱藏過程" : "展開過程" }}
-          </el-button>
+          <div>
+            <el-button
+              v-if="battleTimeline && showTimeline"
+              size="small"
+              type="danger"
+              plain
+              style="margin-right: 8px"
+              @click="handleClearTimeline"
+            >
+              清除詳細過程
+            </el-button>
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              @click="showTimeline = !showTimeline"
+            >
+              {{ showTimeline ? "隱藏過程" : "展開過程" }}
+            </el-button>
+          </div>
         </div>
       </template>
-      <div v-show="showTimeline" class="timeline-content">
+      <div v-if="showTimeline" class="timeline-content">
         <div
           v-if="
             battleTimeline &&
@@ -507,6 +612,9 @@ const setting = ref({
     maxFloor: 0,
     minDurability: 10,
     allowEmptyHanded: false,
+    ignoreMemberStatus: false,
+    stopAtBoss: false,
+    deathPolicy: "idle",
   },
 });
 
@@ -566,6 +674,10 @@ watch(
         maxFloor: newVal.setting.partyMode?.maxFloor ?? 0,
         minDurability: newVal.setting.partyMode?.minDurability ?? 10,
         allowEmptyHanded: newVal.setting.partyMode?.allowEmptyHanded ?? false,
+        ignoreMemberStatus:
+          newVal.setting.partyMode?.ignoreMemberStatus ?? false,
+        stopAtBoss: newVal.setting.partyMode?.stopAtBoss ?? false,
+        deathPolicy: newVal.setting.partyMode?.deathPolicy || "idle",
       };
 
       setting.value.battleMode = newVal.setting.battleMode || "battle";
@@ -630,6 +742,9 @@ watch(
         maxFloor: setting.value.partyMode.maxFloor,
         minDurability: setting.value.partyMode.minDurability,
         allowEmptyHanded: setting.value.partyMode.allowEmptyHanded,
+        ignoreMemberStatus: setting.value.partyMode.ignoreMemberStatus,
+        stopAtBoss: setting.value.partyMode.stopAtBoss,
+        deathPolicy: setting.value.partyMode.deathPolicy,
       };
 
       battleAuto.medicineSetting.medicineHpId =
@@ -702,6 +817,12 @@ const checkArmor = () => {
 const showContent = ref(false);
 const toggleBattleInfo = () => {
   showContent.value = !showContent.value;
+};
+
+const handleClearTimeline = () => {
+  if (account.value) {
+    account.value.automation.battle.timeline = null;
+  }
 };
 
 const handleAutoBattle = async () => {

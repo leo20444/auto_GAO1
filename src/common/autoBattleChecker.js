@@ -12,7 +12,8 @@ class autoBattleChecker {
     weaponCheckTag,
     myWeaponChecker,
     medicineCheckTag,
-    medicineSetting
+    medicineSetting,
+    allAccounts
   ) {
     this.profile = profile;
     this.user = user;
@@ -22,6 +23,7 @@ class autoBattleChecker {
     this.myWeaponChecker = myWeaponChecker;
     this.medicineCheckTag = medicineCheckTag;
     this.medicineSetting = medicineSetting;
+    this.allAccounts = allAccounts;
   }
 
   safeMove = async (mapId) => {
@@ -205,6 +207,149 @@ class autoBattleChecker {
 
     // 3. 移動到目標地圖
     if (this.profile.zoneName !== this.setting.map) {
+      const pMode = this.setting.partyMode;
+      if (
+        this.profile.zoneName === "起始之鎮" &&
+        pMode &&
+        pMode.enabled &&
+        !pMode.ignoreMemberStatus
+      ) {
+        if (this.allAccounts) {
+          if (!pMode.isLeader) {
+            // 隊員端：等待隊長出發
+            const leaderAcc = this.allAccounts.find((a) => {
+              const aParty = a.automation?.battle?.setting?.partyMode;
+              return (
+                aParty &&
+                aParty.enabled &&
+                aParty.isLeader &&
+                a.automation.battle.setting.map === this.setting.map
+              );
+            });
+            if (leaderAcc) {
+              const isLeaderInTown = leaderAcc.profile.zoneName === "起始之鎮";
+              const isLeaderMoving = leaderAcc.profile.actionStatus === "移動";
+              if (isLeaderInTown && !isLeaderMoving) {
+                ElMessage("組隊同步：等待隊長出發...");
+                return false;
+              }
+            }
+          } else {
+            // 隊長端：等待所有我方託管成員在起始之鎮就緒
+            const partyStatus = await this.user.getPartyStatus();
+            if (partyStatus && partyStatus.party && partyStatus.party.members) {
+              const members = partyStatus.party.members;
+              let allReady = true;
+
+              for (const member of members) {
+                // 排除隊長自己
+                if (
+                  Number(member.user_id) === Number(this.profile.id) ||
+                  Number(member.user_id) === Number(this.profile.userId) ||
+                  Number(member.user_id) === Number(this.profile.user_id)
+                ) {
+                  continue;
+                }
+
+                // 尋找我方託管組員
+                const memberAcc = this.allAccounts.find(
+                  (a) =>
+                    (a.profile.id &&
+                      Number(a.profile.id) === Number(member.user_id)) ||
+                    (a.profile.userId &&
+                      Number(a.profile.userId) === Number(member.user_id)) ||
+                    (a.profile.user_id &&
+                      Number(a.profile.user_id) === Number(member.user_id))
+                );
+
+                if (memberAcc) {
+                  // 1. 必須回到起始之鎮
+                  if (memberAcc.profile.zoneName !== "起始之鎮") {
+                    allReady = false;
+                    console.log(
+                      `[隊長等待] 隊友 ${member.character_name} 尚未回到起始之鎮`
+                    );
+                    break;
+                  }
+
+                  // 2. 必須不忙碌 (排除重生、移動、鍛造，允許空閒、休息)
+                  const isBusy =
+                    memberAcc.profile.actionStatus !== "空閒" &&
+                    memberAcc.profile.actionStatus !== "休息" &&
+                    memberAcc.profile.actionStatus !== "戰鬥";
+                  if (isBusy) {
+                    allReady = false;
+                    console.log(
+                      `[隊長等待] 隊友 ${member.character_name} 忙碌中 (${memberAcc.profile.actionStatus})`
+                    );
+                    break;
+                  }
+
+                  // 3. HP / SP 必須滿足
+                  const mSetting = memberAcc.automation.battle.setting;
+                  const hpLimit = mSetting.hp || 100;
+                  const spLimit = mSetting.sp || 150;
+                  const isHpOk =
+                    member.hp >= member.max_hp || member.hp > hpLimit;
+                  const isSpOk =
+                    member.mp >= member.max_mp || member.mp > spLimit;
+                  if (!isHpOk || !isSpOk) {
+                    allReady = false;
+                    console.log(
+                      `[隊長等待] 隊友 ${member.character_name} 狀態不滿足 (HP: ${member.hp}/${member.max_hp}, SP: ${member.mp}/${member.max_mp})`
+                    );
+                    break;
+                  }
+
+                  // 4. 武器耐久必須就緒
+                  const minDur = pMode.minDurability || 10;
+                  const memberEquips = memberAcc.items.equipments || [];
+                  const equippedWeapons = memberEquips.filter(
+                    (w) => w.status === "已裝備"
+                  );
+                  const weaponTypes = [
+                    "短刀",
+                    "單手劍",
+                    "細劍",
+                    "單手錘",
+                    "盾牌",
+                    "雙手斧",
+                    "雙手劍",
+                    "太刀",
+                    "長槍",
+                  ];
+                  const equippedWeapon = equippedWeapons.find((w) =>
+                    weaponTypes.includes(w.typeName)
+                  );
+                  if (equippedWeapon) {
+                    if (equippedWeapon.durability < minDur) {
+                      allReady = false;
+                      console.log(
+                        `[隊長等待] 隊友 ${member.character_name} 武器耐久低於門檻 (${equippedWeapon.durability} < ${minDur})`
+                      );
+                      break;
+                    }
+                  } else {
+                    if (!pMode.allowEmptyHanded) {
+                      allReady = false;
+                      console.log(
+                        `[隊長等待] 隊友 ${member.character_name} 空手且不允許空手`
+                      );
+                      break;
+                    }
+                  }
+                }
+              }
+
+              if (!allReady) {
+                ElMessage("組隊同步：等待隊友回村重整...");
+                return false;
+              }
+            }
+          }
+        }
+      }
+
       ElMessage("地圖不對，前往目標地圖！");
       await this.safeMove(getMapIdByName(this.setting.map));
       ElMessage("移動！");
@@ -293,13 +438,35 @@ class autoBattleChecker {
       ElMessage("沒補品！");
       return false;
     }
-    ElMessage("開始吃補品！");
-    let { profile } = await this.user.eatMedicine(medicineId, medicineQuantity);
-    if (!profile) return false;
-    this.setProfileInfo(profile);
-    this.profile = profile;
+    const qty = Math.max(1, Number(medicineQuantity) || 1);
+    ElMessage(`開始吃補品 (預計吃 ${qty} 個)...`);
 
-    return true;
+    let latestProfile = null;
+
+    for (let i = 0; i < qty; i++) {
+      if (qty > 1) {
+        ElMessage(`使用補品中 (${i + 1}/${qty})...`);
+      } else {
+        ElMessage("使用補品中...");
+      }
+
+      let res = await this.user.eatMedicine(medicineId);
+      if (res && res.profile) {
+        latestProfile = res.profile;
+        this.setProfileInfo(res.profile);
+        this.profile = res.profile;
+      } else {
+        ElMessage("補品不足或使用失敗！");
+        break;
+      }
+
+      // 吃完一個後，延遲 800 毫秒以防太頻繁發起 API 導致 429 限制
+      if (i < qty - 1) {
+        await sleep(800);
+      }
+    }
+
+    return latestProfile ? true : false;
   };
 }
 
