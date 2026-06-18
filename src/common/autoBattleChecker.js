@@ -343,7 +343,11 @@ class autoBattleChecker {
 
     // 4. 層數上限檢查
     // 只有在 setting.mapLevel 大於 0 的時候才進行層數上限檢查，若為 0 則代表無上限
+    // 組隊模式下（不論隊長或隊員）跳過個人層數上限，改由隊長的「隊伍層數上限 (maxFloor)」統一控管
+    const pMode = this.setting.partyMode;
+    const isInParty = pMode && pMode.enabled;
     if (
+      !isInParty &&
       this.setting.mapLevel > 0 &&
       this.profile.huntStage >= this.setting.mapLevel
     ) {

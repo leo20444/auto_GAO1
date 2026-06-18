@@ -50,6 +50,7 @@ export interface Account {
           enabled: boolean;
           isLeader: boolean;
           maxFloor: number;
+          runLevel?: number;
           minDurability: number;
           allowEmptyHanded: boolean;
           hasExternalMembers?: boolean;
@@ -234,6 +235,7 @@ function addAccount(token: string) {
             enabled: savedSetting.setting?.partyMode?.enabled ?? false,
             isLeader: savedSetting.setting?.partyMode?.isLeader ?? false,
             maxFloor: savedSetting.setting?.partyMode?.maxFloor ?? 0,
+            runLevel: savedSetting.setting?.partyMode?.runLevel ?? 0,
             minDurability: savedSetting.setting?.partyMode?.minDurability ?? 10,
             allowEmptyHanded:
               savedSetting.setting?.partyMode?.allowEmptyHanded ?? false,
@@ -984,20 +986,21 @@ async function startBattle(token: string) {
 
             if (proceedWithBattle) {
               acc.automation.battle.timeline = null; // 每次發起戰鬥前先清空 Timeline
-              const runLevel = acc.automation.battle.setting.runLevel || 0;
+              const isParty = acc.automation.battle.setting.partyMode?.enabled;
+              const runLevel = isParty
+                ? acc.automation.battle.setting.partyMode?.runLevel || 0
+                : acc.automation.battle.setting.runLevel || 0;
               const currentStage = acc.profile.huntStage || 0;
-              const isRushMode =
-                acc.automation.battle.setting.battleMode === "rush";
               const enableTimeline =
                 acc.automation.battle.setting.enableTimeline !== false;
 
-              if (isRushMode || currentStage < runLevel) {
+              if (currentStage < runLevel) {
                 addLog(
                   acc,
                   "battle",
-                  isRushMode
-                    ? `趕路模式啟用中，發送趕路請求...`
-                    : `當前層數 (${currentStage}F) 低於趕路層數 (${runLevel}F)，發送趕路請求...`
+                  `當前層數 (${currentStage}F) 低於${
+                    isParty ? "隊伍" : ""
+                  }趕路層數 (${runLevel}F)，發送趕路請求...`
                 );
                 const runRes = await acc.userObj.run(enableTimeline);
                 if (runRes) {

@@ -53,21 +53,7 @@
       </el-row>
 
       <el-row :gutter="20" style="margin-top: 15px" align="middle">
-        <el-col
-          :span="6"
-          v-if="!setting.partyMode.enabled || setting.partyMode.isLeader"
-        >
-          <div class="input-label">執行模式</div>
-          <el-radio-group
-            v-model="setting.battleMode"
-            size="default"
-            class="full-width-radio-group"
-          >
-            <el-radio-button label="battle">正常戰鬥</el-radio-button>
-            <el-radio-button label="rush">趕路模式</el-radio-button>
-          </el-radio-group>
-        </el-col>
-        <el-col :span="6">
+        <el-col :span="12">
           <div class="input-label">日誌更新</div>
           <el-radio-group
             v-model="setting.refreshMode"
@@ -251,10 +237,7 @@
       </el-row>
 
       <el-row :gutter="20" style="margin-top: 20px">
-        <el-col
-          :span="8"
-          v-if="!setting.partyMode.enabled || setting.partyMode.isLeader"
-        >
+        <el-col :span="8" v-if="!setting.partyMode.enabled">
           <div class="input-label">層數上限 (0為無上限)</div>
           <el-input-number
             v-model="setting.mapLevel"
@@ -263,10 +246,7 @@
             placeholder="0為無上限"
           />
         </el-col>
-        <el-col
-          :span="8"
-          v-if="!setting.partyMode.enabled || setting.partyMode.isLeader"
-        >
+        <el-col :span="8" v-if="!setting.partyMode.enabled">
           <div class="input-label">趕路層數</div>
           <el-input-number
             v-model="setting.runLevel"
@@ -274,11 +254,7 @@
             style="width: 100%"
           />
         </el-col>
-        <el-col
-          :span="
-            !setting.partyMode.enabled || setting.partyMode.isLeader ? 8 : 24
-          "
-        >
+        <el-col :span="!setting.partyMode.enabled ? 8 : 24">
           <div class="input-label">最低耐久</div>
           <el-input-number
             v-model="setting.weaponDuration"
@@ -300,7 +276,7 @@
         </div>
       </template>
       <el-row :gutter="20" v-if="setting.partyMode.enabled">
-        <el-col :span="8">
+        <el-col :span="6">
           <div class="input-label">我的身分</div>
           <el-switch
             v-model="setting.partyMode.isLeader"
@@ -309,34 +285,53 @@
             inline-prompt
           />
         </el-col>
-        <el-col :span="8" v-if="setting.partyMode.isLeader">
-          <div class="input-label">隊伍層數上限 (0為無上限)</div>
-          <el-input-number
-            v-model="setting.partyMode.maxFloor"
-            :min="0"
-            style="width: 100%"
-            placeholder="0為無上限"
-          />
-          <div
-            style="
-              font-size: 11px;
-              color: #909399;
-              margin-top: 4px;
-              line-height: 1.3;
-            "
-          >
-            ※ 抵達該層直接回村（不挑戰該層）。例如：草原王關 30F，打王前回村設
-            30，打完王關回村設 31。
-          </div>
-        </el-col>
-        <el-col :span="8" v-if="setting.partyMode.isLeader">
-          <div class="input-label">組員最低耐久</div>
-          <el-input-number
-            v-model="setting.partyMode.minDurability"
-            :min="0"
-            style="width: 100%"
-          />
-        </el-col>
+        <template v-if="setting.partyMode.isLeader">
+          <el-col :span="6">
+            <div class="input-label">隊伍層數上限 (0為無上限)</div>
+            <el-input-number
+              v-model="setting.partyMode.maxFloor"
+              :min="0"
+              style="width: 100%"
+              placeholder="0為無上限"
+            />
+            <div
+              style="
+                font-size: 11px;
+                color: #909399;
+                margin-top: 4px;
+                line-height: 1.3;
+              "
+            >
+              ※ 抵達該層直接回村。
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="input-label">隊伍趕路層數</div>
+            <el-input-number
+              v-model="setting.partyMode.runLevel"
+              :min="0"
+              style="width: 100%"
+            />
+            <div
+              style="
+                font-size: 11px;
+                color: #909399;
+                margin-top: 4px;
+                line-height: 1.3;
+              "
+            >
+              ※ 低於該層趕路，否則戰鬥。
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="input-label">組員最低耐久</div>
+            <el-input-number
+              v-model="setting.partyMode.minDurability"
+              :min="0"
+              style="width: 100%"
+            />
+          </el-col>
+        </template>
       </el-row>
       <el-row
         :gutter="20"
@@ -588,7 +583,6 @@ const items = computed(() => ({
 }));
 const selectWeaponList = ref([]);
 
-// 本地可變響應式變數，與 UI 輸入進行雙向綁定
 const setting = ref({
   hp: 100,
   sp: 150,
@@ -602,7 +596,6 @@ const setting = ref({
   autoRest: false,
   autoRestPercent: 90,
   autoRestSeconds: 0,
-  battleMode: "battle",
   enableLogs: true,
   enableTimeline: true,
   refreshMode: "auto",
@@ -610,6 +603,7 @@ const setting = ref({
     enabled: false,
     isLeader: false,
     maxFloor: 0,
+    runLevel: 0,
     minDurability: 10,
     allowEmptyHanded: false,
     ignoreMemberStatus: false,
@@ -672,6 +666,7 @@ watch(
         enabled: newVal.setting.partyMode?.enabled ?? false,
         isLeader: newVal.setting.partyMode?.isLeader ?? false,
         maxFloor: newVal.setting.partyMode?.maxFloor ?? 0,
+        runLevel: newVal.setting.partyMode?.runLevel ?? 0,
         minDurability: newVal.setting.partyMode?.minDurability ?? 10,
         allowEmptyHanded: newVal.setting.partyMode?.allowEmptyHanded ?? false,
         ignoreMemberStatus:
@@ -680,7 +675,6 @@ watch(
         deathPolicy: newVal.setting.partyMode?.deathPolicy || "idle",
       };
 
-      setting.value.battleMode = newVal.setting.battleMode || "battle";
       setting.value.enableLogs = newVal.setting.enableLogs ?? true;
       setting.value.enableTimeline = newVal.setting.enableTimeline ?? true;
       setting.value.refreshMode = newVal.setting.refreshMode || "auto";
@@ -732,7 +726,6 @@ watch(
       battleAuto.setting.autoRest = setting.value.autoRest;
       battleAuto.setting.autoRestPercent = setting.value.autoRestPercent;
       battleAuto.setting.autoRestSeconds = setting.value.autoRestSeconds;
-      battleAuto.setting.battleMode = setting.value.battleMode;
       battleAuto.setting.enableLogs = setting.value.enableLogs;
       battleAuto.setting.enableTimeline = setting.value.enableTimeline;
       battleAuto.setting.refreshMode = setting.value.refreshMode;
@@ -740,6 +733,7 @@ watch(
         enabled: setting.value.partyMode.enabled,
         isLeader: setting.value.partyMode.isLeader,
         maxFloor: setting.value.partyMode.maxFloor,
+        runLevel: setting.value.partyMode.runLevel,
         minDurability: setting.value.partyMode.minDurability,
         allowEmptyHanded: setting.value.partyMode.allowEmptyHanded,
         ignoreMemberStatus: setting.value.partyMode.ignoreMemberStatus,
