@@ -266,9 +266,6 @@ class autoBattleChecker {
                   // 1. 必須回到起始之鎮
                   if (memberAcc.profile.zoneName !== "起始之鎮") {
                     allReady = false;
-                    console.log(
-                      `[隊長等待] 隊友 ${member.character_name} 尚未回到起始之鎮`
-                    );
                     break;
                   }
 
@@ -279,9 +276,6 @@ class autoBattleChecker {
                     memberAcc.profile.actionStatus !== "戰鬥";
                   if (isBusy) {
                     allReady = false;
-                    console.log(
-                      `[隊長等待] 隊友 ${member.character_name} 忙碌中 (${memberAcc.profile.actionStatus})`
-                    );
                     break;
                   }
 
@@ -295,9 +289,6 @@ class autoBattleChecker {
                     member.mp >= member.max_mp || member.mp > spLimit;
                   if (!isHpOk || !isSpOk) {
                     allReady = false;
-                    console.log(
-                      `[隊長等待] 隊友 ${member.character_name} 狀態不滿足 (HP: ${member.hp}/${member.max_hp}, SP: ${member.mp}/${member.max_mp})`
-                    );
                     break;
                   }
 
@@ -324,17 +315,11 @@ class autoBattleChecker {
                   if (equippedWeapon) {
                     if (equippedWeapon.durability < minDur) {
                       allReady = false;
-                      console.log(
-                        `[隊長等待] 隊友 ${member.character_name} 武器耐久低於門檻 (${equippedWeapon.durability} < ${minDur})`
-                      );
                       break;
                     }
                   } else {
                     if (!pMode.allowEmptyHanded) {
                       allReady = false;
-                      console.log(
-                        `[隊長等待] 隊友 ${member.character_name} 空手且不允許空手`
-                      );
                       break;
                     }
                   }

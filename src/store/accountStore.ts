@@ -779,16 +779,6 @@ async function startBattle(token: string) {
                   const members = partyStatus.party.members;
 
                   for (const member of members) {
-                    console.log(
-                      `[組隊成員比對偵錯] 檢查隊友: ${member.character_name} (user_id: ${member.user_id}) | 隊長 ID: ${acc.profile.id} / ${acc.profile.userId} / ${acc.profile.user_id} | 託管帳號群:`,
-                      accounts.map((a) => ({
-                        name: a.profile.nickname || a.profile.name,
-                        id: a.profile.id,
-                        userId: a.profile.userId,
-                        user_id: a.profile.user_id,
-                      }))
-                    );
-
                     // 排除隊長自己
                     if (
                       (acc.profile.id &&
@@ -799,9 +789,6 @@ async function startBattle(token: string) {
                       (acc.profile.user_id &&
                         Number(member.user_id) === Number(acc.profile.user_id))
                     ) {
-                      console.log(
-                        `[組隊成員比對偵錯] ${member.character_name} 是隊長自己，跳過。`
-                      );
                       continue;
                     }
 
@@ -881,10 +868,6 @@ async function startBattle(token: string) {
                       const isMemberSpReady =
                         member.mp >= member.max_mp || member.mp > memberSpLimit;
 
-                      console.log(
-                        `[組隊巡檢-託管隊員] ${member.character_name} 狀態: HP=${member.hp}/${member.max_hp} (設定門檻:${memberHpLimit}), SP=${member.mp}/${member.max_mp} (設定門檻:${memberSpLimit}) | HP 就緒: ${isMemberHpReady}, SP 就緒: ${isMemberSpReady}`
-                      );
-
                       if (!isMemberHpReady || !isMemberSpReady) {
                         addLog(
                           acc,
@@ -917,9 +900,6 @@ async function startBattle(token: string) {
 
                       if (equippedWeapon) {
                         const weaponReady = equippedWeapon.durability >= minDur;
-                        console.log(
-                          `[組隊巡檢-託管隊員] ${member.character_name} 裝備武器: ${equippedWeapon.name} (耐久:${equippedWeapon.durability}, 門檻:${minDur}) | 武器就緒: ${weaponReady}`
-                        );
                         if (!weaponReady) {
                           addLog(
                             acc,
@@ -930,9 +910,6 @@ async function startBattle(token: string) {
                         }
                       } else {
                         const emptyHandedAllowed = pMode.allowEmptyHanded;
-                        console.log(
-                          `[組隊巡檢-託管隊員] ${member.character_name} 目前空手 | 允許空手: ${emptyHandedAllowed}`
-                        );
                         if (!emptyHandedAllowed) {
                           addLog(
                             acc,
@@ -970,15 +947,6 @@ async function startBattle(token: string) {
                           : 1;
                         const externalReady =
                           hpPercent >= 0.5 && mpPercent >= 0.3;
-                        console.log(
-                          `[組隊巡檢-外部隊員] ${
-                            member.character_name
-                          } 狀態: HP=${Math.round(
-                            hpPercent * 100
-                          )}%, SP=${Math.round(
-                            mpPercent * 100
-                          )}% | 狀態就緒: ${externalReady}`
-                        );
                         if (!externalReady) {
                           addLog(
                             acc,
@@ -993,10 +961,6 @@ async function startBattle(token: string) {
                           );
                           allMembersReady = false;
                         }
-                      } else {
-                        console.log(
-                          `[組隊巡檢] 發現非託管隊友 ${member.character_name}，已忽略其狀態檢查。`
-                        );
                       }
                     }
                   }
