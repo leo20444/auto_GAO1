@@ -285,6 +285,57 @@
       </el-row>
     </el-card>
 
+    <!-- 日誌與詳細戰況設定 -->
+    <el-card shadow="never" class="inner-card" style="margin-top: 20px">
+      <template #header>
+        <div class="card-header-flex">
+          <span>日誌與詳細戰況設定</span>
+        </div>
+      </template>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <div class="input-label">執行模式</div>
+          <el-radio-group v-model="setting.battleMode" size="default">
+            <el-radio-button label="battle">正常戰鬥</el-radio-button>
+            <el-radio-button label="rush">趕路模式</el-radio-button>
+          </el-radio-group>
+        </el-col>
+        <el-col :span="8">
+          <div class="input-label">戰況與日誌更新</div>
+          <el-radio-group v-model="setting.refreshMode" size="default">
+            <el-radio-button label="auto">自動刷新</el-radio-button>
+            <el-radio-button label="manual">手動刷新</el-radio-button>
+          </el-radio-group>
+        </el-col>
+        <el-col
+          :span="8"
+          style="display: flex; align-items: flex-end; height: 100%"
+        >
+          <el-button
+            type="primary"
+            plain
+            @click="handleManualRefresh"
+            :loading="manualRefreshing"
+            style="width: 100%; height: 32px"
+          >
+            立即手動刷新
+          </el-button>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20" style="margin-top: 15px">
+        <el-col :span="12">
+          <el-checkbox v-model="setting.enableLogs">
+            啟用戰鬥日誌 (記錄至日誌面板)
+          </el-checkbox>
+        </el-col>
+        <el-col :span="12">
+          <el-checkbox v-model="setting.enableTimeline">
+            啟用戰報詳細過程 (拉取 Timeline API)
+          </el-checkbox>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <div class="log-section" style="margin-top: 20px">
       <el-button
         type="info"
@@ -435,6 +486,10 @@ const setting = ref({
   autoRest: false,
   autoRestPercent: 90,
   autoRestSeconds: 0,
+  battleMode: "battle",
+  enableLogs: true,
+  enableTimeline: true,
+  refreshMode: "auto",
   partyMode: {
     enabled: false,
     isLeader: false,
@@ -469,7 +524,7 @@ const medicineSetting = ref({
   medicineSpQuantity: 0,
 });
 
-const medicineCheckTag = ref(true);
+const medicineCheckTag = ref(false);
 const weaponCheckTag = ref(true);
 const armorCheckTag = ref(false);
 const equipmentCheckTag = ref(true);
@@ -501,6 +556,11 @@ watch(
         minDurability: newVal.setting.partyMode?.minDurability ?? 10,
         allowEmptyHanded: newVal.setting.partyMode?.allowEmptyHanded ?? false,
       };
+
+      setting.value.battleMode = newVal.setting.battleMode || "battle";
+      setting.value.enableLogs = newVal.setting.enableLogs ?? true;
+      setting.value.enableTimeline = newVal.setting.enableTimeline ?? true;
+      setting.value.refreshMode = newVal.setting.refreshMode || "auto";
 
       medicineSetting.value.medicineHpId = newVal.medicineSetting.medicineHpId;
       medicineSetting.value.medicineSpId = newVal.medicineSetting.medicineSpId;
@@ -549,6 +609,10 @@ watch(
       battleAuto.setting.autoRest = setting.value.autoRest;
       battleAuto.setting.autoRestPercent = setting.value.autoRestPercent;
       battleAuto.setting.autoRestSeconds = setting.value.autoRestSeconds;
+      battleAuto.setting.battleMode = setting.value.battleMode;
+      battleAuto.setting.enableLogs = setting.value.enableLogs;
+      battleAuto.setting.enableTimeline = setting.value.enableTimeline;
+      battleAuto.setting.refreshMode = setting.value.refreshMode;
       battleAuto.setting.partyMode = {
         enabled: setting.value.partyMode.enabled,
         isLeader: setting.value.partyMode.isLeader,
@@ -641,6 +705,27 @@ const handleAutoBattle = async () => {
 const handleStop = () => {
   store.stopBattle(props.userObj.token);
   ElMessage.info("自動戰鬥背景任務已停止");
+};
+
+const manualRefreshing = ref(false);
+const handleManualRefresh = async () => {
+  if (!props.userObj || !account.value) return;
+  manualRefreshing.value = true;
+  try {
+    await store.refreshAccountState(account.value, true);
+    if (setting.value.enableTimeline) {
+      const timelineRes = await props.userObj.getTimeline();
+      if (timelineRes && account.value) {
+        account.value.automation.battle.timeline = timelineRes;
+      }
+    }
+    ElMessage.success("日誌與戰況資料重新整理完成");
+  } catch (error) {
+    console.error("手動刷新失敗:", error);
+    ElMessage.error("重新整理失敗");
+  } finally {
+    manualRefreshing.value = false;
+  }
 };
 
 onMounted(async () => {

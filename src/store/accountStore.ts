@@ -32,6 +32,10 @@ export interface Account {
         autoRest: boolean;
         autoRestPercent: number;
         autoRestSeconds: number;
+        battleMode?: string;
+        enableLogs?: boolean;
+        enableTimeline?: boolean;
+        refreshMode?: string;
         partyMode?: {
           enabled: boolean;
           isLeader: boolean;
@@ -206,6 +210,10 @@ function addAccount(token: string) {
           autoRest: savedSetting.setting?.autoRest ?? false,
           autoRestPercent: savedSetting.setting?.autoRestPercent ?? 90,
           autoRestSeconds: savedSetting.setting?.autoRestSeconds ?? 0,
+          battleMode: savedSetting.setting?.battleMode ?? "battle",
+          enableLogs: savedSetting.setting?.enableLogs ?? true,
+          enableTimeline: savedSetting.setting?.enableTimeline ?? true,
+          refreshMode: savedSetting.setting?.refreshMode ?? "auto",
           partyMode: {
             enabled: savedSetting.setting?.partyMode?.enabled ?? false,
             isLeader: savedSetting.setting?.partyMode?.isLeader ?? false,
@@ -218,7 +226,7 @@ function addAccount(token: string) {
         equipmentCheckTag: savedSetting.setting?.equipmentCheckTag ?? true,
         weaponCheckTag: savedSetting.setting?.weaponCheckTag ?? true,
         armorCheckTag: savedSetting.setting?.armorCheckTag ?? false,
-        medicineCheckTag: savedSetting.setting?.medicineCheckTag ?? true,
+        medicineCheckTag: savedSetting.setting?.medicineCheckTag ?? false,
         selectedWeaponQueue: [],
         medicineSetting: {
           medicineHpId: savedSetting.medicineSetting?.medicineHpId ?? "",
@@ -305,9 +313,19 @@ function addLog(
   message: string
 ) {
   const time = new Date().toLocaleTimeString();
-  acc.automation[type].logs.push({ time, m: message });
-  if (acc.automation[type].logs.length > 200) {
-    acc.automation[type].logs.shift();
+  if (type === "battle") {
+    if (acc.automation.battle.setting?.enableLogs === false) {
+      return;
+    }
+    acc.automation.battle.logs.push({ time, m: message });
+    while (acc.automation.battle.logs.length > 1) {
+      acc.automation.battle.logs.shift();
+    }
+  } else {
+    acc.automation[type].logs.push({ time, m: message });
+    if (acc.automation[type].logs.length > 200) {
+      acc.automation[type].logs.shift();
+    }
   }
 }
 
@@ -445,6 +463,20 @@ async function startBattle(token: string) {
               "battle",
               "組隊模式中：狀態已就緒，等待隊長發起戰鬥..."
             );
+            const enableTimeline =
+              acc.automation.battle.setting.enableTimeline !== false;
+            const refreshMode =
+              acc.automation.battle.setting.refreshMode ?? "auto";
+            if (enableTimeline && refreshMode === "auto") {
+              try {
+                const timelineRes = await acc.userObj.getTimeline();
+                if (timelineRes) {
+                  acc.automation.battle.timeline = timelineRes;
+                }
+              } catch (e) {
+                console.error(`[隊員 Timeline 刷新] 失敗:`, e);
+              }
+            }
           } else {
             let proceedWithBattle = true;
 
@@ -795,17 +827,25 @@ async function startBattle(token: string) {
             if (proceedWithBattle) {
               const runLevel = acc.automation.battle.setting.runLevel || 0;
               const currentStage = acc.profile.huntStage || 0;
+              const isRushMode =
+                acc.automation.battle.setting.battleMode === "rush";
+              const enableTimeline =
+                acc.automation.battle.setting.enableTimeline !== false;
 
-              if (currentStage < runLevel) {
+              if (isRushMode || currentStage < runLevel) {
                 addLog(
                   acc,
                   "battle",
-                  `當前層數 (${currentStage}F) 低於趕路層數 (${runLevel}F)，發送趕路請求...`
+                  isRushMode
+                    ? `趕路模式啟用中，發送趕路請求...`
+                    : `當前層數 (${currentStage}F) 低於趕路層數 (${runLevel}F)，發送趕路請求...`
                 );
-                const runRes = await acc.userObj.run();
+                const runRes = await acc.userObj.run(enableTimeline);
                 if (runRes) {
                   safeUpdateProfile(acc, runRes.profile || runRes);
-                  acc.automation.battle.timeline = runRes;
+                  acc.automation.battle.timeline = enableTimeline
+                    ? runRes
+                    : null;
 
                   let logMsg = `趕路成功！結果: ${
                     runRes.winner || "未知"
@@ -828,10 +868,12 @@ async function startBattle(token: string) {
                 }
               } else {
                 addLog(acc, "battle", "狀態檢查通過，發送狩獵請求...");
-                const huntRes = await acc.userObj.battle();
+                const huntRes = await acc.userObj.battle(enableTimeline);
                 if (huntRes) {
                   safeUpdateProfile(acc, huntRes.profile || huntRes);
-                  acc.automation.battle.timeline = huntRes;
+                  acc.automation.battle.timeline = enableTimeline
+                    ? huntRes
+                    : null;
 
                   let logMsg = `狩獵成功！結果: ${
                     huntRes.winner || "未知"

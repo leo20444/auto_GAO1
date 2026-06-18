@@ -95,6 +95,46 @@
         </el-col>
       </el-row>
 
+      <!-- Forge Favorites Configuration -->
+      <el-row :gutter="20" align="middle" style="margin-top: 15px">
+        <el-col :span="10">
+          <div class="input-label">載入收藏組合</div>
+          <el-select
+            v-model="activeFavoriteId"
+            placeholder="選擇已存組合..."
+            style="width: 100%"
+            clearable
+            @change="handleSelectFavorite"
+          >
+            <el-option
+              v-for="fav in favorites"
+              :key="fav.id"
+              :label="fav.favoriteName"
+              :value="fav.id"
+            />
+          </el-select>
+        </el-col>
+        <el-col :span="14" style="margin-top: 20px">
+          <el-button-group>
+            <el-button type="primary" @click="handleSaveFavorite"
+              >儲存組合</el-button
+            >
+            <el-button
+              type="success"
+              :disabled="!activeFavoriteId"
+              @click="handleUpdateFavorite"
+              >更新</el-button
+            >
+            <el-button
+              type="danger"
+              :disabled="!activeFavoriteId"
+              @click="handleDeleteFavorite"
+              >刪除</el-button
+            >
+          </el-button-group>
+        </el-col>
+      </el-row>
+
       <!-- Loop configuration -->
       <el-divider border-style="dashed" style="margin: 15px 0" />
       <el-row :gutter="20" align="middle">
@@ -136,7 +176,25 @@
       <!-- Materials List -->
       <el-row style="margin-top: 15px">
         <el-col :span="24">
-          <div class="input-label">放入材料配置 (背包可用素材)</div>
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            "
+          >
+            <div class="input-label" style="margin-bottom: 0">
+              放入材料配置 (背包可用素材)
+            </div>
+            <el-button
+              type="warning"
+              plain
+              size="small"
+              @click="handleResetMaterials"
+              >重製材料選定</el-button
+            >
+          </div>
           <div v-if="backpackMaterials.length === 0" class="empty-materials">
             背包中無可用素材，請先前往採礦或取得材料。
           </div>
@@ -257,6 +315,40 @@ const selectedMaterials = ref<Record<number, number>>({});
 const loopCraft = ref(false);
 const maxCraftCount = ref(0);
 
+interface ForgeFavorite {
+  id: string;
+  favoriteName: string;
+  weapon_name: string;
+  result_item_id: number;
+  materials: Array<{ item_id: number; quantity: number }>;
+}
+
+const activeFavoriteId = ref<string>("");
+const favorites = ref<ForgeFavorite[]>([]);
+
+const loadFavorites = () => {
+  if (!props.userObj?.token) return;
+  const stored = localStorage.getItem(`forge_favorites_${props.userObj.token}`);
+  if (stored) {
+    try {
+      favorites.value = JSON.parse(stored);
+    } catch (e) {
+      console.error("載入收藏組合失敗:", e);
+      favorites.value = [];
+    }
+  } else {
+    favorites.value = [];
+  }
+};
+
+const saveFavoritesToStorage = () => {
+  if (!props.userObj?.token) return;
+  localStorage.setItem(
+    `forge_favorites_${props.userObj.token}`,
+    JSON.stringify(favorites.value)
+  );
+};
+
 const fetchRecipesAndMaterials = async () => {
   if (!props.userObj) return;
   loadingRecipes.value = true;
@@ -280,6 +372,8 @@ watch(
   (newToken) => {
     if (newToken) {
       fetchRecipesAndMaterials();
+      activeFavoriteId.value = "";
+      loadFavorites();
     }
   },
   { immediate: true }
@@ -462,8 +556,123 @@ const handleManualClaim = async () => {
   }
 };
 
+const handleSelectFavorite = (id: string) => {
+  if (!id) return;
+  const fav = favorites.value.find((f) => f.id === id);
+  if (fav) {
+    weapon_name.value = fav.weapon_name;
+    result_item_id.value = fav.result_item_id;
+
+    const newMats: Record<number, number> = {};
+    backpackMaterials.value.forEach((m) => {
+      newMats[m.item_id] = 0;
+    });
+    fav.materials.forEach((m) => {
+      newMats[m.item_id] = m.quantity;
+    });
+    selectedMaterials.value = newMats;
+    ElMessage.success(`已載入組合：${fav.favoriteName}`);
+  }
+};
+
+const handleSaveFavorite = () => {
+  if (!result_item_id.value) {
+    ElMessage.warning("請先選擇配方");
+    return;
+  }
+  if (!weapon_name.value.trim()) {
+    ElMessage.warning("請先輸入自定義名稱");
+    return;
+  }
+  const favName = prompt("請輸入此收藏組合的名稱：");
+  if (favName === null) return;
+  const trimmedName = favName.trim();
+  if (!trimmedName) {
+    ElMessage.warning("收藏名稱不可為空！");
+    return;
+  }
+
+  const mats: Array<{ item_id: number; quantity: number }> = [];
+  for (const [idStr, qty] of Object.entries(selectedMaterials.value)) {
+    const qtyNum = Number(qty);
+    if (qtyNum > 0) {
+      mats.push({
+        item_id: Number(idStr),
+        quantity: qtyNum,
+      });
+    }
+  }
+
+  const newFav: ForgeFavorite = {
+    id: Date.now().toString(),
+    favoriteName: trimmedName,
+    weapon_name: weapon_name.value,
+    result_item_id: result_item_id.value,
+    materials: mats,
+  };
+
+  favorites.value.push(newFav);
+  saveFavoritesToStorage();
+  activeFavoriteId.value = newFav.id;
+  ElMessage.success(`儲存組合「${trimmedName}」成功！`);
+};
+
+const handleUpdateFavorite = () => {
+  if (!activeFavoriteId.value) return;
+  const favIndex = favorites.value.findIndex(
+    (f) => f.id === activeFavoriteId.value
+  );
+  if (favIndex === -1) return;
+
+  const mats: Array<{ item_id: number; quantity: number }> = [];
+  for (const [idStr, qty] of Object.entries(selectedMaterials.value)) {
+    const qtyNum = Number(qty);
+    if (qtyNum > 0) {
+      mats.push({
+        item_id: Number(idStr),
+        quantity: qtyNum,
+      });
+    }
+  }
+
+  favorites.value[favIndex].weapon_name = weapon_name.value;
+  favorites.value[favIndex].result_item_id = result_item_id.value;
+  favorites.value[favIndex].materials = mats;
+
+  saveFavoritesToStorage();
+  ElMessage.success(
+    `更新組合「${favorites.value[favIndex].favoriteName}」成功！`
+  );
+};
+
+const handleDeleteFavorite = () => {
+  if (!activeFavoriteId.value) return;
+  const favIndex = favorites.value.findIndex(
+    (f) => f.id === activeFavoriteId.value
+  );
+  if (favIndex === -1) return;
+
+  const name = favorites.value[favIndex].favoriteName;
+  if (!confirm(`確定要刪除組合「${name}」嗎？`)) return;
+
+  favorites.value.splice(favIndex, 1);
+  saveFavoritesToStorage();
+  activeFavoriteId.value = "";
+  ElMessage.success(`組合「${name}」已刪除。`);
+};
+
+const handleResetMaterials = () => {
+  const newMats: Record<number, number> = {};
+  Object.keys(selectedMaterials.value).forEach((k) => {
+    newMats[Number(k)] = 0;
+  });
+  selectedMaterials.value = newMats;
+  ElMessage.info("已重製所有材料選定數量為 0");
+};
+
 onMounted(async () => {
   await fetchRecipesAndMaterials();
+  loadFavorites();
 });
 </script>
 

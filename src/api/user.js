@@ -47,9 +47,14 @@ function user(inputToken) {
       if (towerStatus.restStartedAt) {
         activeStatuses.push("休息");
         actionStart = towerStatus.restStartedAt;
-      } else if (towerStatus.moveEndsAt) {
+      } else if (
+        towerStatus.moveEndsAt ||
+        (towerStatus.destinationZone !== undefined &&
+          towerStatus.destinationZone !== null &&
+          towerStatus.zone !== towerStatus.destinationZone)
+      ) {
         activeStatuses.push("移動");
-        actionStart = towerStatus.moveEndsAt;
+        actionStart = towerStatus.moveEndsAt || new Date().toISOString();
       } else if (towerStatus.floor > 0) {
         // 在塔裡、非休息/移動 → 戰鬥中
         activeStatuses.push("戰鬥");
@@ -246,7 +251,7 @@ function user(inputToken) {
     }
   };
 
-  this.run = async function () {
+  this.run = async function (enableTimeline = true) {
     try {
       await axios.get(`${baseurl}/party/status`, { headers: getHeaders() });
       let chooseRes;
@@ -277,9 +282,12 @@ function user(inputToken) {
           throw error;
         }
       }
-      const timelineRes = await axios.get(`${baseurl}/tower/timeline`, {
-        headers: getHeaders(),
-      });
+      let timelineRes = null;
+      if (enableTimeline) {
+        timelineRes = await axios.get(`${baseurl}/tower/timeline`, {
+          headers: getHeaders(),
+        });
+      }
       const advanceRes = await axios.post(
         `${baseurl}/tower/advance`,
         { option: "run" },
@@ -288,11 +296,16 @@ function user(inputToken) {
       const profile = await this.getProfile();
       return {
         ...chooseRes.data,
-        ...timelineRes.data,
+        ...(timelineRes ? timelineRes.data : { lines: [], winner: "" }),
         advance: advanceRes.data,
-        exp: advanceRes.data?.expGained || timelineRes.data?.rewards?.exp || 0,
+        exp:
+          advanceRes.data?.expGained ||
+          (timelineRes ? timelineRes.data?.rewards?.exp : 0) ||
+          0,
         gold:
-          advanceRes.data?.goldGained || timelineRes.data?.rewards?.gold || 0,
+          advanceRes.data?.goldGained ||
+          (timelineRes ? timelineRes.data?.rewards?.gold : 0) ||
+          0,
         profile,
       };
     } catch (error) {
@@ -313,7 +326,7 @@ function user(inputToken) {
     }
   };
 
-  this.battle = async function () {
+  this.battle = async function (enableTimeline = true) {
     try {
       await axios.get(`${baseurl}/party/status`, { headers: getHeaders() });
       let chooseRes;
@@ -344,9 +357,12 @@ function user(inputToken) {
           throw error;
         }
       }
-      const timelineRes = await axios.get(`${baseurl}/tower/timeline`, {
-        headers: getHeaders(),
-      });
+      let timelineRes = null;
+      if (enableTimeline) {
+        timelineRes = await axios.get(`${baseurl}/tower/timeline`, {
+          headers: getHeaders(),
+        });
+      }
       const advanceRes = await axios.post(
         `${baseurl}/tower/advance`,
         { option: "fight" },
@@ -355,11 +371,16 @@ function user(inputToken) {
       const profile = await this.getProfile();
       return {
         ...chooseRes.data,
-        ...timelineRes.data,
+        ...(timelineRes ? timelineRes.data : { lines: [], winner: "" }),
         advance: advanceRes.data,
-        exp: advanceRes.data?.expGained || timelineRes.data?.rewards?.exp || 0,
+        exp:
+          advanceRes.data?.expGained ||
+          (timelineRes ? timelineRes.data?.rewards?.exp : 0) ||
+          0,
         gold:
-          advanceRes.data?.goldGained || timelineRes.data?.rewards?.gold || 0,
+          advanceRes.data?.goldGained ||
+          (timelineRes ? timelineRes.data?.rewards?.gold : 0) ||
+          0,
         profile,
       };
     } catch (error) {

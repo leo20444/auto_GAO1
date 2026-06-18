@@ -1,0 +1,35 @@
+ INFO  Accepting connections at http://localhost:8080
+ HTTP  2026/6/17 下午1:30:16 ::1 GET /
+ HTTP  2026/6/17 下午1:30:16 ::1 Returned 200 in 20 ms
+ HTTP  2026/6/17 下午1:30:16 ::1 GET /js/chunk-vendors.93ed9e7a.js
+ HTTP  2026/6/17 下午1:30:16 ::1 GET /css/chunk-vendors.e873bc91.css
+ HTTP  2026/6/17 下午1:30:16 ::1 GET /css/app.be717e52.css
+ HTTP  2026/6/17 下午1:30:16 ::1 GET /js/app.d778f017.js
+ HTTP  2026/6/17 下午1:30:16 ::1 Returned 200 in 6 ms
+ HTTP  2026/6/17 下午1:30:16 ::1 Returned 200 in 9 ms
+ HTTP  2026/6/17 下午1:30:16 ::1 Returned 200 in 9 ms
+ HTTP  2026/6/17 下午1:30:16 ::1 Returned 200 in 19 ms
+ HTTP  2026/6/17 下午1:30:16 ::1 GET /favicon.ico
+ HTTP  2026/6/17 下午1:30:16 ::1 Returned 200 in 3 ms
+ HTTP  2026/6/17 下午1:30:22 ::1 GET /
+ HTTP  2026/6/17 下午1:30:22 ::1 Returned 200 in 1 ms
+ HTTP  2026/6/17 下午1:30:22 ::1 GET /js/chunk-vendors.93ed9e7a.js
+ HTTP  2026/6/17 下午1:30:22 ::1 Returned 200 in 2 ms
+ HTTP  2026/6/17 下午1:30:22 ::1 GET /css/chunk-vendors.e873bc91.css
+ HTTP  2026/6/17 下午1:30:22 ::1 GET /js/app.d778f017.js
+ HTTP  2026/6/17 下午1:30:22 ::1 Returned 200 in 3 ms
+ HTTP  2026/6/17 下午1:30:22 ::1 Returned 200 in 4 ms
+ HTTP  2026/6/17 下午1:30:22 ::1 GET /css/app.be717e52.css
+ HTTP  2026/6/17 下午1:30:22 ::1 Returned 200 in 2 ms
+ HTTP  2026/6/17 下午1:30:23 ::1 GET /favicon.ico
+ HTTP  2026/6/17 下午1:30:23 ::1 Returned 200 in 2 ms
+ HTTP  2026/6/17 下午1:32:38 ::1 GET /css/chunk-vendors.e873bc91.css
+ HTTP  2026/6/17 下午1:32:38 ::1 GET /css/app.be717e52.css
+ HTTP  2026/6/17 下午1:32:38 ::1 Returned 304 in 2 ms
+ HTTP  2026/6/17 下午1:32:38 ::1 Returned 304 in 2 ms
+ HTTP  2026/6/17 下午1:32:38 ::1 GET /.well-known/appspecific/com.chrome.devtools.json
+ HTTP  2026/6/17 下午1:32:38 ::1 Returned 200 in 0 ms
+ HTTP  2026/6/17 下午1:32:38 ::1 GET /js/chunk-vendors.93ed9e7a.js.map
+ HTTP  2026/6/17 下午1:32:38 ::1 GET /js/app.d778f017.js.map
+ HTTP  2026/6/17 下午1:32:38 ::1 Returned 200 in 4 ms
+ HTTP  2026/6/17 下午1:32:38 ::1 Returned 200 in 28 ms
