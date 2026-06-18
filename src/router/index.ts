@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
+import { createRouter, createWebHashHistory, RouteRecordRaw } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 
 const routes: Array<RouteRecordRaw> = [
@@ -9,8 +9,10 @@ const routes: Array<RouteRecordRaw> = [
   },
 ];
 
+// 使用 Hash History 以相容 GitHub Pages 靜態部署
+// （GitHub Pages 不支援 HTML5 History API，重整會 404）
 const router = createRouter({
-  history: createWebHistory(process.env.BASE_URL),
+  history: createWebHashHistory(),
   routes,
 });
 
