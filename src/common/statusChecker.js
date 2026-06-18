@@ -98,15 +98,20 @@ class statusCheck {
               }
             }
 
+            const isHpAboveThreshold = this.profile.hp > (this.setting.hp || 0);
+            const isSpAboveThreshold = this.profile.sp > (this.setting.sp || 0);
+
             if (
               hpPercent >= targetPercent &&
               mpPercent >= targetPercent &&
+              isHpAboveThreshold &&
+              isSpAboveThreshold &&
               partyMembersReady
             ) {
               ElMessage(
                 `已休息 ${Math.floor(
                   elapsedSec
-                )} 秒 (目標 ${targetSeconds} 秒)，且全員狀態已達標。停止休息！`
+                )} 秒 (目標 ${targetSeconds} 秒)，且狀態已達標。停止休息！`
               );
               let profile = await this.user.restComplete();
               if (profile) {
@@ -118,9 +123,11 @@ class statusCheck {
               console.log(
                 `[狀態檢查-自動休息評估] 狀態未達標，繼續在伺服器休息... (HP: ${Math.round(
                   hpPercent
-                )}%, SP: ${Math.round(
+                )}% / 門檻: ${this.setting.hp} HP, SP: ${Math.round(
                   mpPercent
-                )}%, 隊員就緒: ${partyMembersReady})`
+                )}% / 門檻: ${
+                  this.setting.sp
+                } SP, 隊員就緒: ${partyMembersReady})`
               );
               return false;
             }

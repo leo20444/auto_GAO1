@@ -3,6 +3,15 @@ import user from "../api/user.js";
 import { ElMessage } from "element-plus";
 import moment from "moment";
 
+function isRateLimitError(error: any): boolean {
+  if (!error) return false;
+  return (
+    error.response?.status === 429 ||
+    error.status === 429 ||
+    String(error.message || "").includes("429")
+  );
+}
+
 export interface LogItem {
   time: string;
   m: string;
@@ -16,6 +25,7 @@ export interface Account {
   automation: {
     battle: {
       running: boolean;
+      loopId?: number;
       logs: LogItem[];
       timeline: any;
       setting: {
@@ -58,6 +68,7 @@ export interface Account {
     };
     forge: {
       running: boolean;
+      loopId?: number;
       logs: LogItem[];
       weaponPayload: {
         weapon_name: string;
@@ -76,6 +87,7 @@ export interface Account {
     };
     mining: {
       running: boolean;
+      loopId?: number;
       logs: LogItem[];
       setting: {
         zone: string;
@@ -363,15 +375,25 @@ async function startBattle(token: string) {
   }
 
   acc.automation.battle.running = true;
+  const currentLoopId = Date.now();
+  acc.automation.battle.loopId = currentLoopId;
   addLog(acc, "battle", "自動戰鬥已啟動");
 
   (async () => {
-    while (acc.automation.battle.running) {
+    while (
+      acc.automation.battle.running &&
+      acc.automation.battle.loopId === currentLoopId
+    ) {
       try {
+        if (acc.automation.battle.loopId !== currentLoopId) break;
+        console.log(
+          `[自動戰鬥輪詢] ${acc.profile.name || acc.token} - 開始回合檢查...`
+        );
         addLog(acc, "battle", "開始戰鬥回合檢查...");
 
         // 1. 取得最新個人資料與背包裝備、組隊資訊、地圖資訊
         await refreshAccountState(acc);
+        if (acc.automation.battle.loopId !== currentLoopId) break;
 
         // 1.5 檢查忙碌狀態 (休息/移動/重生/鍛造中)
         const statusCheckObj = new statusCheck(
@@ -405,6 +427,7 @@ async function startBattle(token: string) {
             );
           }
           await sleep(waitTime);
+          if (acc.automation.battle.loopId !== currentLoopId) break;
           continue;
         }
 
@@ -909,18 +932,29 @@ async function startBattle(token: string) {
 
         // 5. 等待回合間隔時間 (11秒)
         await sleep(11000);
+        if (acc.automation.battle.loopId !== currentLoopId) break;
 
         // 安全防頻率鎖定隨機抖動
         const jitter = Math.floor(Math.random() * 1500) + 500;
         await sleep(jitter);
+        if (acc.automation.battle.loopId !== currentLoopId) break;
       } catch (error: any) {
         if (error === "CRITICAL_STOP_NO_WEAPON") {
           addLog(acc, "battle", "武器已損壞且不允許空手戰鬥，自動戰鬥已停止。");
           acc.automation.battle.running = false;
           break;
         }
-        addLog(acc, "battle", `發生異常: ${error.message || error}`);
-        await sleep(5000);
+        if (isRateLimitError(error)) {
+          addLog(
+            acc,
+            "battle",
+            "伺服器限制 (429 Too Many Requests)，自動戰鬥暫停 30 秒以防封鎖..."
+          );
+          await sleep(30000);
+        } else {
+          addLog(acc, "battle", `發生異常: ${error.message || error}`);
+          await sleep(5000);
+        }
       }
     }
   })();
@@ -940,16 +974,23 @@ async function startForge(token: string) {
 
   acc.automation.forge.setting.currentCraftCount = 0;
   acc.automation.forge.running = true;
+  const currentLoopId = Date.now();
+  acc.automation.forge.loopId = currentLoopId;
   addLog(acc, "forge", "自動鍛造已啟動");
 
   (async () => {
     let isCrafting = acc.profile.actionStatus === "鍛造";
-    while (acc.automation.forge.running) {
+    while (
+      acc.automation.forge.running &&
+      acc.automation.forge.loopId === currentLoopId
+    ) {
       try {
+        if (acc.automation.forge.loopId !== currentLoopId) break;
         addLog(acc, "forge", "開始鍛造狀態檢查...");
 
         // 1. 取得最新個人資料與背包素材、組隊資訊、地圖資訊
         await refreshAccountState(acc);
+        if (acc.automation.forge.loopId !== currentLoopId) break;
 
         // 2. 初始化 forgeChecker
         const checker = new forgeChecker(
@@ -1065,13 +1106,24 @@ async function startForge(token: string) {
 
         // 等待冷卻：自動鍛造每 15 秒檢查一次
         await sleep(15000);
+        if (acc.automation.forge.loopId !== currentLoopId) break;
 
         // 安全抖動延遲
         const jitter = Math.floor(Math.random() * 1500) + 500;
         await sleep(jitter);
+        if (acc.automation.forge.loopId !== currentLoopId) break;
       } catch (error: any) {
-        addLog(acc, "forge", `發生異常: ${error.message || error}`);
-        await sleep(5000);
+        if (isRateLimitError(error)) {
+          addLog(
+            acc,
+            "forge",
+            "伺服器限制 (429 Too Many Requests)，自動鍛造暫停 30 秒..."
+          );
+          await sleep(30000);
+        } else {
+          addLog(acc, "forge", `發生異常: ${error.message || error}`);
+          await sleep(5000);
+        }
       }
     }
   })();
@@ -1100,11 +1152,17 @@ async function startMining(token: string) {
   }
 
   acc.automation.mining.running = true;
+  const currentLoopId = Date.now();
+  acc.automation.mining.loopId = currentLoopId;
   addLog(acc, "mining", "自動採礦已啟動");
 
   (async () => {
-    while (acc.automation.mining.running) {
+    while (
+      acc.automation.mining.running &&
+      acc.automation.mining.loopId === currentLoopId
+    ) {
       try {
+        if (acc.automation.mining.loopId !== currentLoopId) break;
         if (acc.automation.battle.running) {
           addLog(acc, "mining", "自動戰鬥運行中，自動採礦暫停發送開始請求。");
           await sleep(30000);
@@ -1176,11 +1234,22 @@ async function startMining(token: string) {
         }
 
         await sleep(30000);
+        if (acc.automation.mining.loopId !== currentLoopId) break;
         const jitter = Math.floor(Math.random() * 2000) + 1000;
         await sleep(jitter);
+        if (acc.automation.mining.loopId !== currentLoopId) break;
       } catch (error: any) {
-        addLog(acc, "mining", `發生異常: ${error.message || error}`);
-        await sleep(10000);
+        if (isRateLimitError(error)) {
+          addLog(
+            acc,
+            "mining",
+            "伺服器限制 (429 Too Many Requests)，自動採礦暫停 30 秒..."
+          );
+          await sleep(30000);
+        } else {
+          addLog(acc, "mining", `發生異常: ${error.message || error}`);
+          await sleep(10000);
+        }
       }
     }
   })();
@@ -1245,4 +1314,5 @@ export const useAccountStore = () => ({
   startMining,
   stopMining,
   refreshAccount,
+  refreshAccountState,
 });

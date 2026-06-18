@@ -33,7 +33,7 @@
             type="warning"
             size="large"
             @click="handleManualClaim"
-            :disabled="!isForging"
+            :disabled="!isForging || scriptStatus"
             style="width: 100%"
           >
             手動領取裝備
@@ -106,12 +106,18 @@
             clearable
             @change="handleSelectFavorite"
           >
-            <el-option
-              v-for="fav in favorites"
-              :key="fav.id"
-              :label="fav.favoriteName"
-              :value="fav.id"
-            />
+            <el-option-group
+              v-for="group in groupedFavorites"
+              :key="group.label"
+              :label="group.label"
+            >
+              <el-option
+                v-for="fav in group.options"
+                :key="fav.id"
+                :label="fav.favoriteName"
+                :value="fav.id"
+              />
+            </el-option-group>
           </el-select>
         </el-col>
         <el-col :span="14" style="margin-top: 20px">
@@ -195,12 +201,30 @@
               >重製材料選定</el-button
             >
           </div>
+          <div
+            v-if="backpackMaterials.length > 0"
+            style="margin-top: 10px; margin-bottom: 10px"
+          >
+            <el-input
+              v-model="searchMaterialQuery"
+              placeholder="搜尋材料名稱進行模糊篩選..."
+              clearable
+              size="default"
+              style="width: 100%"
+            />
+          </div>
           <div v-if="backpackMaterials.length === 0" class="empty-materials">
             背包中無可用素材，請先前往採礦或取得材料。
           </div>
+          <div
+            v-else-if="filteredMaterials.length === 0"
+            class="empty-materials"
+          >
+            找不到符合搜尋條件的材料。
+          </div>
           <div v-else class="materials-grid">
             <div
-              v-for="item in backpackMaterials"
+              v-for="item in filteredMaterials"
               :key="item.item_id"
               class="material-card"
               :class="{ 'has-selected': selectedMaterials[item.item_id] > 0 }"
@@ -304,6 +328,17 @@ const showContent = ref(false);
 const recipes = ref<any[]>([]);
 const backpackMaterials = ref<any[]>([]);
 const loadingRecipes = ref(false);
+const searchMaterialQuery = ref("");
+
+const filteredMaterials = computed(() => {
+  if (!searchMaterialQuery.value.trim()) {
+    return backpackMaterials.value;
+  }
+  const query = searchMaterialQuery.value.trim().toLowerCase();
+  return backpackMaterials.value.filter((item) =>
+    (item.name || "").toLowerCase().includes(query)
+  );
+});
 
 // 防止 store→local 和 local→store 互相觸發的防護 flag
 const isUpdatingFromStore = ref(false);
@@ -325,6 +360,63 @@ interface ForgeFavorite {
 
 const activeFavoriteId = ref<string>("");
 const favorites = ref<ForgeFavorite[]>([]);
+
+const weaponTypeMap: Record<string, string> = {
+  Dagger: "短刀",
+  "One-handed Sword": "單手劍",
+  Sword: "單手劍",
+  Rapier: "細劍",
+  Hammer: "單手錘",
+  Shield: "盾牌",
+  Axe: "雙手斧",
+  "Two-handed Sword": "雙手劍",
+  Greatsword: "雙手劍",
+  Katana: "太刀",
+  Spear: "長槍",
+  Wand: "法杖",
+  Bow: "弓箭",
+};
+
+const getWeaponTypeOfFavorite = (fav: ForgeFavorite) => {
+  const recipe = recipes.value.find((r) => r.id === fav.result_item_id);
+  if (recipe) {
+    if (recipe.tags && recipe.tags.length > 0) {
+      const rawTag = recipe.tags[0];
+      return weaponTypeMap[rawTag] || rawTag;
+    }
+    const name = recipe.name || "";
+    for (const t of [
+      "短刀",
+      "單手劍",
+      "細劍",
+      "單手錘",
+      "盾牌",
+      "雙手斧",
+      "雙手劍",
+      "太刀",
+      "長槍",
+      "法杖",
+      "弓箭",
+    ]) {
+      if (name.includes(t)) return t;
+    }
+  }
+  return "其他裝備";
+};
+
+const groupedFavorites = computed(() => {
+  const groups: { label: string; options: ForgeFavorite[] }[] = [];
+  favorites.value.forEach((fav) => {
+    const typeName = getWeaponTypeOfFavorite(fav);
+    let group = groups.find((g) => g.label === typeName);
+    if (!group) {
+      group = { label: typeName, options: [] };
+      groups.push(group);
+    }
+    group.options.push(fav);
+  });
+  return groups.sort((a, b) => a.label.localeCompare(b.label));
+});
 
 const loadFavorites = () => {
   if (!props.userObj?.token) return;
@@ -538,21 +630,27 @@ const isForging = computed(() => {
 const handleManualClaim = async () => {
   try {
     const res = await props.userObj.forgeComplete();
-    if (res && res.activeStatuses) {
+    if (
+      res instanceof Error ||
+      (res && res.error) ||
+      !res ||
+      !res.activeStatuses
+    ) {
+      const err = res || {};
+      const errMsg =
+        err.response?.data?.message ||
+        err.response?.data ||
+        err.message ||
+        "領取失敗，鍛造可能尚未完成";
+      ElMessage.error(`領取失敗：${errMsg}`);
+    } else {
       emit("set-profile", res);
       ElMessage.success("手動領取裝備成功");
       await fetchRecipesAndMaterials();
-    } else {
-      console.error("Manual claim failed with response:", res);
-      const errMsg =
-        res?.response?.data?.message ||
-        res?.message ||
-        "領取失敗，鍛造可能尚未完成";
-      ElMessage.error(errMsg);
     }
   } catch (err: any) {
     console.error("handleManualClaim exception:", err);
-    ElMessage.error(err.message || "領取時發生錯誤");
+    ElMessage.error(`領取失敗：${err.message || err}`);
   }
 };
 

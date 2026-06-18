@@ -37,6 +37,68 @@
         </el-col>
       </el-row>
 
+      <!-- 執行與日誌設定 -->
+      <el-row :gutter="20" style="margin-top: 15px" align="middle">
+        <el-col :span="6">
+          <div class="input-label">執行模式</div>
+          <el-radio-group
+            v-model="setting.battleMode"
+            size="default"
+            class="full-width-radio-group"
+          >
+            <el-radio-button label="battle">正常戰鬥</el-radio-button>
+            <el-radio-button label="rush">趕路模式</el-radio-button>
+          </el-radio-group>
+        </el-col>
+        <el-col :span="6">
+          <div class="input-label">日誌更新</div>
+          <el-radio-group
+            v-model="setting.refreshMode"
+            size="default"
+            class="full-width-radio-group"
+          >
+            <el-radio-button label="auto">自動刷新</el-radio-button>
+            <el-radio-button label="manual">手動刷新</el-radio-button>
+          </el-radio-group>
+        </el-col>
+        <el-col :span="4">
+          <div class="input-label" style="visibility: hidden">手動刷新</div>
+          <el-button
+            type="primary"
+            plain
+            size="default"
+            @click="handleManualRefresh"
+            :loading="manualRefreshing"
+            style="width: 100%"
+          >
+            立即刷新
+          </el-button>
+        </el-col>
+        <el-col
+          :span="8"
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            justify-content: flex-end;
+            padding-top: 20px;
+          "
+        >
+          <el-checkbox
+            v-model="setting.enableLogs"
+            style="margin: 0; height: 18px; line-height: 18px"
+          >
+            啟用戰鬥日誌
+          </el-checkbox>
+          <el-checkbox
+            v-model="setting.enableTimeline"
+            style="margin: 0; height: 18px; line-height: 18px"
+          >
+            啟用戰報詳細過程 (Timeline)
+          </el-checkbox>
+        </el-col>
+      </el-row>
+
       <el-divider border-style="dashed" />
 
       <el-row :gutter="20">
@@ -281,57 +343,6 @@
             :min="1"
             style="width: 100%"
           />
-        </el-col>
-      </el-row>
-    </el-card>
-
-    <!-- 日誌與詳細戰況設定 -->
-    <el-card shadow="never" class="inner-card" style="margin-top: 20px">
-      <template #header>
-        <div class="card-header-flex">
-          <span>日誌與詳細戰況設定</span>
-        </div>
-      </template>
-      <el-row :gutter="20">
-        <el-col :span="8">
-          <div class="input-label">執行模式</div>
-          <el-radio-group v-model="setting.battleMode" size="default">
-            <el-radio-button label="battle">正常戰鬥</el-radio-button>
-            <el-radio-button label="rush">趕路模式</el-radio-button>
-          </el-radio-group>
-        </el-col>
-        <el-col :span="8">
-          <div class="input-label">戰況與日誌更新</div>
-          <el-radio-group v-model="setting.refreshMode" size="default">
-            <el-radio-button label="auto">自動刷新</el-radio-button>
-            <el-radio-button label="manual">手動刷新</el-radio-button>
-          </el-radio-group>
-        </el-col>
-        <el-col
-          :span="8"
-          style="display: flex; align-items: flex-end; height: 100%"
-        >
-          <el-button
-            type="primary"
-            plain
-            @click="handleManualRefresh"
-            :loading="manualRefreshing"
-            style="width: 100%; height: 32px"
-          >
-            立即手動刷新
-          </el-button>
-        </el-col>
-      </el-row>
-      <el-row :gutter="20" style="margin-top: 15px">
-        <el-col :span="12">
-          <el-checkbox v-model="setting.enableLogs">
-            啟用戰鬥日誌 (記錄至日誌面板)
-          </el-checkbox>
-        </el-col>
-        <el-col :span="12">
-          <el-checkbox v-model="setting.enableTimeline">
-            啟用戰報詳細過程 (拉取 Timeline API)
-          </el-checkbox>
         </el-col>
       </el-row>
     </el-card>
@@ -713,11 +724,13 @@ const handleManualRefresh = async () => {
   manualRefreshing.value = true;
   try {
     await store.refreshAccountState(account.value, true);
-    if (setting.value.enableTimeline) {
+    if (setting.value.enableTimeline && account.value.profile?.huntStage > 0) {
       const timelineRes = await props.userObj.getTimeline();
       if (timelineRes && account.value) {
         account.value.automation.battle.timeline = timelineRes;
       }
+    } else if (account.value) {
+      account.value.automation.battle.timeline = null;
     }
     ElMessage.success("日誌與戰況資料重新整理完成");
   } catch (error) {
@@ -742,6 +755,17 @@ onMounted(async () => {
 .inner-card {
   background-color: #141619 !important;
   border: 1px solid #2d2f31 !important;
+}
+
+.full-width-radio-group {
+  display: inline-flex;
+  width: 100%;
+}
+.full-width-radio-group :deep(.el-radio-button) {
+  flex: 1;
+}
+.full-width-radio-group :deep(.el-radio-button__inner) {
+  width: 100%;
 }
 
 .button-group {

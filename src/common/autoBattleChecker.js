@@ -169,12 +169,23 @@ class autoBattleChecker {
 
     // 1. 如果角色當前在「起始之鎮」
     if (this.profile.zoneName === "起始之鎮") {
-      // 檢查是否需要休息（血量或魔量沒滿）
+      const targetPercent = this.setting?.autoRest
+        ? Number(this.setting.autoRestPercent ?? 90)
+        : 100;
+      const hpPercent = (this.profile.hp / this.profile.fullHp) * 100;
+      const mpPercent = (this.profile.sp / this.profile.fullSp) * 100;
+
+      const isHpAboveThreshold = this.profile.hp > (this.setting.hp || 0);
+      const isSpAboveThreshold = this.profile.sp > (this.setting.sp || 0);
+
+      // 檢查是否需要休息（血量或魔量未達標，或低於保護門檻）
       if (
-        this.profile.hp < this.profile.fullHp ||
-        this.profile.sp < this.profile.fullSp
+        hpPercent < targetPercent ||
+        mpPercent < targetPercent ||
+        !isHpAboveThreshold ||
+        !isSpAboveThreshold
       ) {
-        ElMessage("回城休息中，補滿狀態...");
+        ElMessage(`回城休息中，補滿狀態至門檻 (${targetPercent}%)...`);
         await this.rest(); // 發起休息
         return false; // 等待休息完成
       }

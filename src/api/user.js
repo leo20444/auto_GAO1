@@ -72,7 +72,17 @@ function user(inputToken) {
     }
 
     // 採礦：可與鍛造並行（情境二），後端保證不會與戰鬥同時發生（情境一互斥）
-    if (mineStatus && mineStatus.active) {
+    // 當角色在塔內有任何活動時（休息、移動、戰鬥），不應視為採礦狀態
+    const isInTower =
+      towerStatus &&
+      (towerStatus.restStartedAt ||
+        towerStatus.moveEndsAt ||
+        (towerStatus.destinationZone !== undefined &&
+          towerStatus.destinationZone !== null &&
+          towerStatus.zone !== towerStatus.destinationZone) ||
+        towerStatus.floor > 0);
+
+    if (mineStatus && mineStatus.active && !isInTower) {
       activeStatuses.push("採礦");
       if (!actionStart)
         actionStart = mineStatus.startedAt || new Date().toISOString();
@@ -253,9 +263,11 @@ function user(inputToken) {
 
   this.run = async function (enableTimeline = true) {
     try {
+      console.log("[API] 發送趕路巡檢，先獲取組隊狀態...");
       await axios.get(`${baseurl}/party/status`, { headers: getHeaders() });
       let chooseRes;
       try {
+        console.log("[API] 發送 /tower/choose (run) 請求...");
         chooseRes = await axios.post(
           `${baseurl}/tower/choose`,
           { option: "run" },
@@ -273,12 +285,17 @@ function user(inputToken) {
           await this.moveComplete();
           await this.restComplete();
           await sleep(500);
+          console.log("[API] 重新發送 /tower/choose (run)...");
           chooseRes = await axios.post(
             `${baseurl}/tower/choose`,
             { option: "run" },
             { headers: getHeaders() }
           );
         } else {
+          console.error(
+            "[API] /tower/choose (run) 發生錯誤:",
+            error.response?.data || error.message
+          );
           throw error;
         }
       }
@@ -321,6 +338,10 @@ function user(inputToken) {
       });
       return res.data;
     } catch (error) {
+      // 404 表示目前不在塔內戰鬥或無最新戰鬥歷史，為正常狀況，安靜返回 null
+      if (error.response && error.response.status === 404) {
+        return null;
+      }
       console.error("getTimeline error:", error);
       return false;
     }
@@ -328,9 +349,11 @@ function user(inputToken) {
 
   this.battle = async function (enableTimeline = true) {
     try {
+      console.log("[API] 發送戰鬥巡檢，先獲取組隊狀態...");
       await axios.get(`${baseurl}/party/status`, { headers: getHeaders() });
       let chooseRes;
       try {
+        console.log("[API] 發送 /tower/choose (fight) 請求...");
         chooseRes = await axios.post(
           `${baseurl}/tower/choose`,
           { option: "fight" },
@@ -348,12 +371,17 @@ function user(inputToken) {
           await this.moveComplete();
           await this.restComplete();
           await sleep(500);
+          console.log("[API] 重新發送 /tower/choose (fight)...");
           chooseRes = await axios.post(
             `${baseurl}/tower/choose`,
             { option: "fight" },
             { headers: getHeaders() }
           );
         } else {
+          console.error(
+            "[API] /tower/choose 發生錯誤:",
+            error.response?.data || error.message
+          );
           throw error;
         }
       }
