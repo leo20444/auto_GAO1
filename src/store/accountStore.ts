@@ -182,27 +182,7 @@ async function refreshAccountState(acc: Account, forceAll = false) {
         acc.profile.inSecretRealm = !!profile.towerStatus.inSecretRealm;
       }
     }
-    if (acc.profile && acc.profile.inSecretRealm === true) {
-      const currentMap = acc.profile.zoneName;
-      const floor = acc.profile.huntStage || 0;
-      const currentMapId = getMapIdByName(currentMap);
-      const isSecretFloor =
-        currentMapId === 1
-          ? floor === secretRealmConfig[1001].enterFloor
-          : currentMapId === 2
-          ? floor === secretRealmConfig[2001].enterFloor
-          : currentMapId === 4
-          ? floor === secretRealmConfig[4001].enterFloor
-          : false;
-      if (!isSecretFloor) {
-        acc.profile.inSecretRealm = false;
-        addLog(
-          acc,
-          "battle",
-          "[秘徑] 偵測到已離開秘徑地圖或樓層，自動重設秘徑鎖定狀態。"
-        );
-      }
-    }
+
     // 同步抓取背包與裝備清單
     const itemsRes = await acc.userObj.item();
     if (itemsRes) {
