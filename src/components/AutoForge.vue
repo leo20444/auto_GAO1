@@ -554,6 +554,39 @@ const saveFavoritesToStorage = () => {
   );
 };
 
+const syncFromStore = () => {
+  const newVal = currentForgeAutomation.value;
+  if (newVal) {
+    isUpdatingFromStore.value = true;
+    weapon_name.value = newVal.weaponPayload.weapon_name || "";
+    result_item_id.value = newVal.weaponPayload.result_item_id || 0;
+    loopCraft.value = newVal.setting?.loopCraft ?? false;
+    maxCraftCount.value = newVal.setting?.maxCraftCount ?? 0;
+
+    const newMats: Record<number, number> = {};
+    if (newVal.weaponPayload.materials) {
+      newVal.weaponPayload.materials.forEach((m: any) => {
+        newMats[m.item_id] = m.quantity;
+        if (m.name) {
+          store.knownItemNames[m.item_id] = m.name;
+        }
+      });
+    }
+    // 確保將 backpackMaterials 中的項目也補上預設的 0
+    backpackMaterials.value.forEach((item) => {
+      if (newMats[item.item_id] === undefined) {
+        newMats[item.item_id] = 0;
+      }
+    });
+    selectedMaterials.value = newMats;
+
+    setTimeout(() => {
+      isUpdatingFromStore.value = false;
+      isInitialized.value = true; // 狀態同步完成，啟動初始化鎖
+    }, 0);
+  }
+};
+
 const fetchRecipesAndMaterials = async () => {
   if (!props.userObj) return;
   loadingRecipes.value = true;
@@ -568,6 +601,7 @@ const fetchRecipesAndMaterials = async () => {
     ElMessage.error("載入配方與材料清單失敗");
   } finally {
     loadingRecipes.value = false;
+    syncFromStore();
   }
 };
 
@@ -588,38 +622,14 @@ watch(
 // 當更換帳號或後台狀態更新時，同步寫入本地綁定變數
 watch(
   currentForgeAutomation,
-  (newVal) => {
-    if (newVal) {
-      isUpdatingFromStore.value = true;
-      weapon_name.value = newVal.weaponPayload.weapon_name || "";
-      result_item_id.value = newVal.weaponPayload.result_item_id || 0;
-      loopCraft.value = newVal.setting?.loopCraft ?? false;
-      maxCraftCount.value = newVal.setting?.maxCraftCount ?? 0;
-
-      const newMats: Record<number, number> = {};
-      if (newVal.weaponPayload.materials) {
-        newVal.weaponPayload.materials.forEach((m: any) => {
-          newMats[m.item_id] = m.quantity;
-          if (m.name) {
-            store.knownItemNames[m.item_id] = m.name;
-          }
-        });
-      }
-      // 確保將 backpackMaterials 中的項目也補上預設的 0
-      backpackMaterials.value.forEach((item) => {
-        if (newMats[item.item_id] === undefined) {
-          newMats[item.item_id] = 0;
-        }
-      });
-      selectedMaterials.value = newMats;
-
-      setTimeout(() => {
-        isUpdatingFromStore.value = false;
-        isInitialized.value = true; // 狀態同步完成，啟動初始化鎖
-      }, 0);
+  () => {
+    if (!isInitialized.value) {
+      // 正在換帳號，先不從這裡搶先 initialization，等 API 拿回資料後再初始化
+      return;
     }
+    syncFromStore();
   },
-  { immediate: true, deep: true }
+  { deep: true }
 );
 
 // 當背包材料載入完成時，補齊本地選擇材料的預設 0
