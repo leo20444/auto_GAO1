@@ -573,11 +573,19 @@ function user(inputToken) {
         Sword: "單手劍",
         Rapier: "細劍",
         Mace: "單手錘",
+        Hammer: "單手錘",
         Shield: "盾牌",
+        Axe: "雙手斧",
         GreatAxe: "雙手斧",
         GreatSword: "雙手劍",
         Katana: "太刀",
         Spear: "長槍",
+        Bow: "弓",
+        Wand: "法杖",
+        Pistol: "手槍",
+        SMG: "衝鋒槍",
+        LMG: "輕機槍",
+        Sniper: "狙擊槍",
         Coat: "大衣",
         Armor: "盔甲",
       };
@@ -596,12 +604,21 @@ function user(inputToken) {
         return "單手劍";
       };
 
+      const equippedObj = currentlyEquippedRes.data.equipment || {};
+      const resolveSlot = (id) => {
+        for (const [slot, item] of Object.entries(equippedObj)) {
+          if (item && item.id === id) return slot;
+        }
+        return null;
+      };
+
       const normalizedEquipments = (equipRes.data.equipment || []).map((e) => ({
         ...e,
         name: e.weapon_name || e.name,
         fullDurability: e.max_durability,
         typeName: e.typeName || resolveTypeName(e),
         status: equippedIds.includes(e.id) ? "已裝備" : "未裝備",
+        slot: resolveSlot(e.id),
       }));
 
       const normalizedItems = (invRes.data.items || []).map((item) => ({

@@ -5,6 +5,9 @@ import moment from "moment";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import map, { secretRealmConfig } from "../common/mapping";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import typeList from "../common/typeList";
 
 function getMapIdByName(name: string): number | null {
   if (!name) return null;
@@ -55,6 +58,7 @@ export interface Account {
         battleMode?: string;
         bossSoloMode?: "none" | "pass" | "wait";
         useTeleportCrystal?: boolean;
+        enableDualWield?: boolean;
         refreshMode?: string;
         enableLogs?: boolean;
         enableTimeline?: boolean;
@@ -76,7 +80,8 @@ export interface Account {
       weaponCheckTag: boolean;
       armorCheckTag: boolean;
       medicineCheckTag: boolean;
-      selectedWeaponQueue: any[];
+      selectedWeaponQueueMain: any[];
+      selectedWeaponQueueOff: any[];
       medicineSetting: {
         medicineHpId: string;
         medicineSpId: string;
@@ -129,7 +134,13 @@ export interface Account {
 
 const accounts = reactive<Account[]>([]);
 const selectedAccountIndex = ref<number>(-1);
-const knownItemNames = reactive<Record<number, string>>({});
+const knownItemNames = reactive<Record<number, string>>({
+  119: "鑽石",
+  123: "綠寶石",
+  124: "藍寶石",
+  125: "紅寶石",
+  126: "紫水晶",
+});
 
 // 從 localStorage 載入
 const savedTokens = JSON.parse(localStorage.getItem("strList") || "[]");
@@ -156,7 +167,10 @@ watch(
           medicineCheckTag: acc.automation.battle.medicineCheckTag,
         },
         medicineSetting: acc.automation.battle.medicineSetting,
-        selectedWeaponQueue: acc.automation.battle.selectedWeaponQueue || [],
+        selectedWeaponQueueMain:
+          acc.automation.battle.selectedWeaponQueueMain || [],
+        selectedWeaponQueueOff:
+          acc.automation.battle.selectedWeaponQueueOff || [],
         forgeWeaponPayload: acc.automation.forge.weaponPayload,
         forgeSetting: acc.automation.forge.setting,
         miningSetting: {
@@ -254,12 +268,12 @@ function addAccount(token: string) {
         logs: [],
         timeline: null,
         setting: {
-          hp: savedSetting.setting?.hp ?? 100,
-          sp: savedSetting.setting?.sp ?? 150,
+          hp: savedSetting.setting?.hp ?? 1,
+          sp: savedSetting.setting?.sp ?? 1,
           map: savedSetting.setting?.map ?? "",
           weaponDuration: savedSetting.setting?.weaponDuration ?? 20,
-          mapLevel: savedSetting.setting?.mapLevel ?? 2,
-          runLevel: savedSetting.setting?.runLevel ?? 0,
+          mapLevel: savedSetting.setting?.mapLevel ?? 0,
+          runLevel: savedSetting.setting?.runLevel ?? 3000,
           hpRecoveryMode: savedSetting.setting?.hpRecoveryMode ?? "rest",
           spRecoveryMode: savedSetting.setting?.spRecoveryMode ?? "rest",
           restDuration: savedSetting.setting?.restDuration ?? 10,
@@ -273,7 +287,8 @@ function addAccount(token: string) {
             (savedSetting.setting?.autoChallengeBossSolo === true
               ? "wait"
               : "none"),
-          useTeleportCrystal: savedSetting.setting?.useTeleportCrystal ?? false,
+          useTeleportCrystal: savedSetting.setting?.useTeleportCrystal ?? true,
+          enableDualWield: savedSetting.setting?.enableDualWield ?? false,
           refreshMode: savedSetting.setting?.refreshMode ?? "auto",
           enableLogs: savedSetting.setting?.enableLogs ?? true,
           enableTimeline: savedSetting.setting?.enableTimeline ?? true,
@@ -295,11 +310,12 @@ function addAccount(token: string) {
             deathPolicy: savedSetting.setting?.partyMode?.deathPolicy ?? "idle",
           },
         },
-        equipmentCheckTag: savedSetting.setting?.equipmentCheckTag ?? true,
-        weaponCheckTag: savedSetting.setting?.weaponCheckTag ?? true,
+        equipmentCheckTag: savedSetting.setting?.equipmentCheckTag ?? false,
+        weaponCheckTag: savedSetting.setting?.weaponCheckTag ?? false,
         armorCheckTag: savedSetting.setting?.armorCheckTag ?? false,
         medicineCheckTag: savedSetting.setting?.medicineCheckTag ?? false,
-        selectedWeaponQueue: savedSetting.selectedWeaponQueue ?? [],
+        selectedWeaponQueueMain: savedSetting.selectedWeaponQueueMain ?? [],
+        selectedWeaponQueueOff: savedSetting.selectedWeaponQueueOff ?? [],
         medicineSetting: {
           medicineHpId: savedSetting.medicineSetting?.medicineHpId ?? "",
           medicineSpId: savedSetting.medicineSetting?.medicineSpId ?? "",
@@ -552,14 +568,28 @@ async function startBattle(token: string) {
         }
         const weaponList = acc.items.equipments;
         // 優先使用使用者在 UI 手動選好的佇列；若為空則回退到依耐久篩選
-        const userQueue = acc.automation.battle.selectedWeaponQueue || [];
-        const selectWeaponList =
-          userQueue.length > 0
-            ? userQueue
+        const selectWeaponListMain =
+          acc.automation.battle.selectedWeaponQueueMain.length > 0
+            ? acc.automation.battle.selectedWeaponQueueMain
             : acc.automation.battle.setting.weaponDuration
             ? weaponList.filter(
                 (w: any) =>
-                  w.durability >= acc.automation.battle.setting.weaponDuration
+                  w.durability >=
+                    acc.automation.battle.setting.weaponDuration &&
+                  typeList.weapon.includes(w.typeName)
+              )
+            : [];
+
+        const selectWeaponListOff =
+          acc.automation.battle.selectedWeaponQueueOff.length > 0
+            ? acc.automation.battle.selectedWeaponQueueOff
+            : acc.automation.battle.setting.weaponDuration
+            ? weaponList.filter(
+                (w: any) =>
+                  w.durability >=
+                    acc.automation.battle.setting.weaponDuration &&
+                  typeList.weapon.includes(w.typeName) &&
+                  w.hand_type === "one_hand"
               )
             : [];
 
@@ -567,9 +597,13 @@ async function startBattle(token: string) {
         const myWeaponChecker = new weaponChecker(
           acc.automation.battle.setting,
           weaponList,
-          selectWeaponList,
-          () => {
-            return;
+          selectWeaponListMain,
+          selectWeaponListOff,
+          (newList: any) => {
+            acc.automation.battle.selectedWeaponQueueMain = newList;
+          },
+          (newList: any) => {
+            acc.automation.battle.selectedWeaponQueueOff = newList;
           },
           acc.automation.battle.weaponCheckTag,
           acc.automation.battle.armorCheckTag,

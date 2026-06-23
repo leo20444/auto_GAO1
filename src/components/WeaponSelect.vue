@@ -27,8 +27,12 @@
       <div v-show="equipmentCheck">
         <!-- 篩選區 -->
         <el-row :gutter="12" style="margin-bottom: 12px" align="middle">
-          <el-col :span="8">
-            <div class="input-label">武器類型篩選</div>
+          <el-col
+            :xs="24"
+            :sm="8"
+            style="margin-bottom: 10px; sm-margin-bottom: 0"
+          >
+            <div class="input-label">裝備類型篩選</div>
             <el-select
               v-model="selectedType"
               placeholder="全部類型"
@@ -39,117 +43,229 @@
               <el-option v-for="t in allTypes" :key="t" :label="t" :value="t" />
             </el-select>
           </el-col>
-          <el-col :span="16">
-            <div class="input-label">選擇武器（點擊加入佇列）</div>
+          <el-col :xs="24" :sm="16">
+            <div class="input-label">選擇裝備（點擊按鈕加入主手/副手佇列）</div>
             <div class="weapon-pool">
               <div
                 v-for="weapon in filteredWeapons"
                 :key="weapon.id"
                 class="weapon-chip"
-                :class="{ 'in-queue': isInQueue(weapon.id) }"
-                @click="addToQueue(weapon)"
               >
                 <span class="weapon-chip-name">{{ weapon.name }}</span>
                 <span class="weapon-chip-meta">
-                  [{{ weapon.typeName }}] {{ weapon.durability }}/{{
-                    weapon.fullDurability
-                  }}
+                  <template v-if="typeList.armor.includes(weapon.typeName)">
+                    [防具 · {{ weapon.typeName }}]
+                  </template>
+                  <template v-else>
+                    [{{ weapon.hand_type === "two_hand" ? "雙手" : "單手" }} ·
+                    {{ weapon.typeName }}]
+                  </template>
+                  耐久: {{ weapon.durability }}
                 </span>
-                <el-icon v-if="isInQueue(weapon.id)" class="chip-check"
-                  ><CircleCheckFilled
-                /></el-icon>
+
+                <!-- 裝備分流按鈕 -->
+                <span style="margin-left: 10px; display: inline-flex; gap: 4px">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    style="
+                      padding: 2px 6px;
+                      font-size: 11px;
+                      height: 20px;
+                      line-height: 20px;
+                    "
+                    @click.stop="addToQueueMain(weapon)"
+                  >
+                    {{
+                      typeList.armor.includes(weapon.typeName)
+                        ? "+佇列"
+                        : "+主手"
+                    }}
+                  </el-button>
+                  <el-button
+                    v-if="
+                      enableDualWield &&
+                      weapon.hand_type !== 'two_hand' &&
+                      !typeList.armor.includes(weapon.typeName)
+                    "
+                    size="small"
+                    type="success"
+                    plain
+                    style="
+                      padding: 2px 6px;
+                      font-size: 11px;
+                      height: 20px;
+                      line-height: 20px;
+                    "
+                    @click.stop="addToQueueOff(weapon)"
+                  >
+                    +副手
+                  </el-button>
+                </span>
               </div>
               <div v-if="filteredWeapons.length === 0" class="empty-pool">
-                無符合的武器
+                無符合的裝備
               </div>
             </div>
           </el-col>
         </el-row>
 
-        <!-- 武器佇列 -->
-        <div class="queue-section">
-          <div class="queue-header">
-            <span class="queue-title">武器替換佇列（依順序自動換裝）</span>
-            <el-button
-              v-if="weaponQueue.length > 0"
-              type="danger"
-              size="small"
-              plain
-              @click="clearQueue"
-              >清空佇列</el-button
-            >
-          </div>
-
-          <div v-if="weaponQueue.length === 0" class="empty-queue">
-            尚未加入任何武器，點擊上方武器加入佇列
-          </div>
-
-          <div v-else class="queue-list">
-            <div
-              v-for="(weapon, idx) in weaponQueue"
-              :key="weapon.id"
-              class="queue-item"
-            >
-              <span class="queue-order">{{ idx + 1 }}</span>
-              <div class="queue-item-info">
-                <span class="queue-name">{{ weapon.name }}</span>
-                <span class="queue-meta">
-                  [{{ weapon.typeName }}] 耐久: {{ weapon.durability }}/{{
-                    weapon.fullDurability
-                  }}
+        <!-- 雙手佇列區 -->
+        <el-row :gutter="20">
+          <!-- 主手武器佇列 -->
+          <el-col
+            :xs="24"
+            :sm="enableDualWield ? 12 : 24"
+            style="margin-bottom: 15px"
+          >
+            <div class="queue-section">
+              <div class="queue-header">
+                <span class="queue-title">
+                  主手與防具替換佇列（自動依序換裝）
                 </span>
-              </div>
-              <div class="queue-actions">
                 <el-button
-                  size="small"
-                  :disabled="idx === 0"
-                  @click="moveUp(idx)"
-                  circle
-                  plain
-                  :icon="ArrowUp"
-                />
-                <el-button
-                  size="small"
-                  :disabled="idx === weaponQueue.length - 1"
-                  @click="moveDown(idx)"
-                  circle
-                  plain
-                  :icon="ArrowDown"
-                />
-                <el-button
-                  size="small"
+                  v-if="selectedWeaponQueueMain.length > 0"
                   type="danger"
-                  @click="removeFromQueue(idx)"
-                  circle
+                  size="small"
                   plain
-                  :icon="Delete"
-                />
+                  @click="clearQueueMain"
+                  >清空</el-button
+                >
+              </div>
+
+              <div
+                v-if="selectedWeaponQueueMain.length === 0"
+                class="empty-queue"
+              >
+                主手與防具尚未加入，點擊上方裝備 [+主手] 或 [+佇列] 加入
+              </div>
+
+              <div v-else class="queue-list">
+                <div
+                  v-for="(weapon, idx) in selectedWeaponQueueMain"
+                  :key="weapon.id"
+                  class="queue-item"
+                >
+                  <span class="queue-order">{{ idx + 1 }}</span>
+                  <div class="queue-item-info">
+                    <span class="queue-name">{{ weapon.name }}</span>
+                    <span class="queue-meta">
+                      <template v-if="typeList.armor.includes(weapon.typeName)">
+                        [防具 · {{ weapon.typeName }}]
+                      </template>
+                      <template v-else>
+                        [{{
+                          weapon.hand_type === "two_hand" ? "雙手" : "單手"
+                        }}
+                        · {{ weapon.typeName }}]
+                      </template>
+                      耐久: {{ weapon.durability }}/{{ weapon.fullDurability }}
+                    </span>
+                  </div>
+                  <div class="queue-actions">
+                    <el-button
+                      size="small"
+                      :disabled="idx === 0"
+                      @click="moveUpMain(idx)"
+                      circle
+                      plain
+                      :icon="ArrowUp"
+                    />
+                    <el-button
+                      size="small"
+                      :disabled="idx === selectedWeaponQueueMain.length - 1"
+                      @click="moveDownMain(idx)"
+                      circle
+                      plain
+                      :icon="ArrowDown"
+                    />
+                    <el-button
+                      size="small"
+                      type="danger"
+                      @click="removeFromQueueMain(idx)"
+                      circle
+                      plain
+                      :icon="Delete"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </el-col>
 
-          <div
-            v-if="weaponQueue.length > 0"
-            style="
-              margin-top: 10px;
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-            "
+          <!-- 副手武器佇列 -->
+          <el-col
+            :xs="24"
+            :sm="12"
+            v-if="enableDualWield"
+            style="margin-bottom: 15px"
           >
-            <el-tag v-if="isApplied" type="success" effect="dark" size="small">
-              ✓ 已套用至自動戰鬥（{{ weaponQueue.length }} 把武器）
-            </el-tag>
-            <span v-else style="font-size: 12px; color: #909399">尚未套用</span>
-            <el-button type="primary" @click="applyQueue"> 套用佇列 </el-button>
-          </div>
-          <div
-            v-if="!weaponQueue.length && isApplied"
-            style="margin-top: 10px; text-align: right"
-          >
-            <el-tag type="info" size="small">已清空佇列</el-tag>
-          </div>
-        </div>
+            <div class="queue-section">
+              <div class="queue-header">
+                <span class="queue-title">副手替換佇列（僅單手武器/盾牌）</span>
+                <el-button
+                  v-if="selectedWeaponQueueOff.length > 0"
+                  type="danger"
+                  size="small"
+                  plain
+                  @click="clearQueueOff"
+                  >清空</el-button
+                >
+              </div>
+
+              <div
+                v-if="selectedWeaponQueueOff.length === 0"
+                class="empty-queue"
+              >
+                副手尚未加入武器，點擊上方裝備 [+副手] 加入
+              </div>
+
+              <div v-else class="queue-list">
+                <div
+                  v-for="(weapon, idx) in selectedWeaponQueueOff"
+                  :key="weapon.id"
+                  class="queue-item"
+                >
+                  <span class="queue-order">{{ idx + 1 }}</span>
+                  <div class="queue-item-info">
+                    <span class="queue-name">{{ weapon.name }}</span>
+                    <span class="queue-meta">
+                      [單手 · {{ weapon.typeName }}] 耐久:
+                      {{ weapon.durability }}/{{ weapon.fullDurability }}
+                    </span>
+                  </div>
+                  <div class="queue-actions">
+                    <el-button
+                      size="small"
+                      :disabled="idx === 0"
+                      @click="moveUpOff(idx)"
+                      circle
+                      plain
+                      :icon="ArrowUp"
+                    />
+                    <el-button
+                      size="small"
+                      :disabled="idx === selectedWeaponQueueOff.length - 1"
+                      @click="moveDownOff(idx)"
+                      circle
+                      plain
+                      :icon="ArrowDown"
+                    />
+                    <el-button
+                      size="small"
+                      type="danger"
+                      @click="removeFromQueueOff(idx)"
+                      circle
+                      plain
+                      :icon="Delete"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
       </div>
     </transition>
   </div>
@@ -157,33 +273,34 @@
 
 <script lang="ts" setup>
 import { ref, defineProps, defineEmits, computed, watch } from "vue";
-import {
-  ArrowUp,
-  ArrowDown,
-  Delete,
-  CircleCheckFilled,
-} from "@element-plus/icons-vue";
+import { ArrowUp, ArrowDown, Delete } from "@element-plus/icons-vue";
 import typeList from "../common/typeList";
 
 const props = defineProps({
   weaponList: Array,
-  selectWeaponList: Array,
+  selectedWeaponQueueMain: Array,
+  selectedWeaponQueueOff: Array,
   weaponCheckTag: Boolean,
   armorCheckTag: Boolean,
   equipmentCheckTag: Boolean,
+  enableDualWield: Boolean,
 });
 
 const emits = defineEmits([
-  "select-weapon",
   "equipment-check",
   "update-check-weapon",
   "update-check-armor",
+  "update:selected-weapon-queue-main",
+  "update:selected-weapon-queue-off",
 ]);
 
 // 裝備管理開關
 const equipmentCheck = ref(props.equipmentCheckTag ?? true);
 const checkWeapon = ref(props.weaponCheckTag ?? true);
 const checkArmor = ref(props.armorCheckTag ?? false);
+
+const selectedWeaponQueueMain = ref<any[]>([]);
+const selectedWeaponQueueOff = ref<any[]>([]);
 
 // 同步 props 變化
 watch(
@@ -204,6 +321,20 @@ watch(
     checkArmor.value = v ?? false;
   }
 );
+watch(
+  () => props.selectedWeaponQueueMain,
+  (v) => {
+    selectedWeaponQueueMain.value = v ? [...v] : [];
+  },
+  { immediate: true, deep: true }
+);
+watch(
+  () => props.selectedWeaponQueueOff,
+  (v) => {
+    selectedWeaponQueueOff.value = v ? [...v] : [];
+  },
+  { immediate: true, deep: true }
+);
 
 // 類型篩選
 const selectedType = ref("");
@@ -217,67 +348,114 @@ const allTypes = computed(() => {
   return Array.from(merged);
 });
 
-// 篩選後的可選武器（排除已在佇列中的不需要排除，讓使用者看到已加入標記）
+// 篩選後的可選武器（排除已在主手或副手佇列中的武器）
 const filteredWeapons = computed(() => {
   const list: any[] = props.weaponList || [];
-  if (!selectedType.value) return list;
-  return list.filter((w: any) => w.typeName === selectedType.value);
+  const unselected = list.filter((w: any) => !isInQueue(w.id));
+  if (!selectedType.value) return unselected;
+  return unselected.filter((w: any) => w.typeName === selectedType.value);
 });
 
-// 武器佇列（有序）
-const weaponQueue = ref<any[]>([]);
-
-// 是否已套用至自動戰鬥
-const isApplied = ref(false);
-
 // 判斷武器是否已在佇列中
-const isInQueue = (id: any) => weaponQueue.value.some((w) => w.id === id);
+const isInQueue = (id: any) =>
+  selectedWeaponQueueMain.value.some((w) => w.id === id) ||
+  selectedWeaponQueueOff.value.some((w) => w.id === id);
 
-// 加入佇列（若已在佇列中則移除，切換效果）
-const addToQueue = (weapon: any) => {
-  const idx = weaponQueue.value.findIndex((w) => w.id === weapon.id);
+// 事件轉發與雙向綁定觸發
+const emitMain = () => {
+  emits("update:selected-weapon-queue-main", [
+    ...selectedWeaponQueueMain.value,
+  ]);
+};
+
+const emitOff = () => {
+  emits("update:selected-weapon-queue-off", [...selectedWeaponQueueOff.value]);
+};
+
+// 加入主手佇列
+const addToQueueMain = (weapon: any) => {
+  const idx = selectedWeaponQueueMain.value.findIndex(
+    (w) => w.id === weapon.id
+  );
   if (idx !== -1) {
-    weaponQueue.value.splice(idx, 1);
+    selectedWeaponQueueMain.value.splice(idx, 1);
   } else {
-    weaponQueue.value.push({ ...weapon });
+    selectedWeaponQueueMain.value.push({ ...weapon });
   }
+  emitMain();
 };
 
-// 從佇列移除
-const removeFromQueue = (idx: number) => {
-  weaponQueue.value.splice(idx, 1);
+// 加入副手佇列
+const addToQueueOff = (weapon: any) => {
+  const idx = selectedWeaponQueueOff.value.findIndex((w) => w.id === weapon.id);
+  if (idx !== -1) {
+    selectedWeaponQueueOff.value.splice(idx, 1);
+  } else {
+    selectedWeaponQueueOff.value.push({ ...weapon });
+  }
+  emitOff();
 };
 
-// 上移
-const moveUp = (idx: number) => {
+// 從主手移除
+const removeFromQueueMain = (idx: number) => {
+  selectedWeaponQueueMain.value.splice(idx, 1);
+  emitMain();
+};
+
+// 從副手移除
+const removeFromQueueOff = (idx: number) => {
+  selectedWeaponQueueOff.value.splice(idx, 1);
+  emitOff();
+};
+
+// 主手排程上移
+const moveUpMain = (idx: number) => {
   if (idx === 0) return;
-  const tmp = weaponQueue.value[idx - 1];
-  weaponQueue.value[idx - 1] = weaponQueue.value[idx];
-  weaponQueue.value[idx] = tmp;
+  const tmp = selectedWeaponQueueMain.value[idx - 1];
+  selectedWeaponQueueMain.value[idx - 1] = selectedWeaponQueueMain.value[idx];
+  selectedWeaponQueueMain.value[idx] = tmp;
+  emitMain();
 };
 
-// 下移
-const moveDown = (idx: number) => {
-  if (idx >= weaponQueue.value.length - 1) return;
-  const tmp = weaponQueue.value[idx + 1];
-  weaponQueue.value[idx + 1] = weaponQueue.value[idx];
-  weaponQueue.value[idx] = tmp;
+// 主手排程下移
+const moveDownMain = (idx: number) => {
+  if (idx >= selectedWeaponQueueMain.value.length - 1) return;
+  const tmp = selectedWeaponQueueMain.value[idx + 1];
+  selectedWeaponQueueMain.value[idx + 1] = selectedWeaponQueueMain.value[idx];
+  selectedWeaponQueueMain.value[idx] = tmp;
+  emitMain();
 };
 
-// 清空佇列
-const clearQueue = () => {
-  weaponQueue.value = [];
-  isApplied.value = false;
-  emits("select-weapon", []);
+// 副手排程上移
+const moveUpOff = (idx: number) => {
+  if (idx === 0) return;
+  const tmp = selectedWeaponQueueOff.value[idx - 1];
+  selectedWeaponQueueOff.value[idx - 1] = selectedWeaponQueueOff.value[idx];
+  selectedWeaponQueueOff.value[idx] = tmp;
+  emitOff();
 };
 
-// 套用佇列至自動戰鬥
-const applyQueue = () => {
-  emits("select-weapon", [...weaponQueue.value]);
-  isApplied.value = true;
+// 副手排程下移
+const moveDownOff = (idx: number) => {
+  if (idx >= selectedWeaponQueueOff.value.length - 1) return;
+  const tmp = selectedWeaponQueueOff.value[idx + 1];
+  selectedWeaponQueueOff.value[idx + 1] = selectedWeaponQueueOff.value[idx];
+  selectedWeaponQueueOff.value[idx] = tmp;
+  emitOff();
 };
 
-// 事件轉發
+// 清空主手
+const clearQueueMain = () => {
+  selectedWeaponQueueMain.value = [];
+  emitMain();
+};
+
+// 清空副手
+const clearQueueOff = () => {
+  selectedWeaponQueueOff.value = [];
+  emitOff();
+};
+
 const handleEquipmentCheck = () => emits("equipment-check");
 const updateCheckWeapon = () => emits("update-check-weapon");
 const updateCheckArmor = () => emits("update-check-armor");
@@ -308,44 +486,23 @@ const updateCheckArmor = () => emits("update-check-armor");
 .weapon-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 4px 10px;
   border-radius: 16px;
   border: 1px solid #3a3d42;
   background: #23262b;
-  cursor: pointer;
-  transition: all 0.2s;
   font-size: 12px;
   user-select: none;
 }
 
-.weapon-chip:hover {
-  border-color: #409eff;
-  background: #1a2a3a;
-}
-
-.weapon-chip.in-queue {
-  border-color: #67c23a;
-  background: #1a2e1a;
-  color: #67c23a;
-}
-
 .weapon-chip-name {
   font-weight: 600;
+  color: #e0e0e0;
 }
 
 .weapon-chip-meta {
   color: #606266;
   font-size: 11px;
-}
-
-.weapon-chip.in-queue .weapon-chip-meta {
-  color: #4a9a4a;
-}
-
-.chip-check {
-  color: #67c23a;
-  font-size: 14px;
 }
 
 .empty-pool {
@@ -356,11 +513,11 @@ const updateCheckArmor = () => emits("update-check-armor");
 
 /* 佇列區 */
 .queue-section {
-  margin-top: 16px;
   border: 1px solid #2d2f31;
   border-radius: 8px;
   padding: 12px;
   background: #141619;
+  min-height: 120px;
 }
 
 .queue-header {
@@ -380,7 +537,7 @@ const updateCheckArmor = () => emits("update-check-armor");
   text-align: center;
   color: #606266;
   font-size: 12px;
-  padding: 16px 0;
+  padding: 20px 0;
   border: 1px dashed #3a3d42;
   border-radius: 6px;
 }
@@ -395,7 +552,7 @@ const updateCheckArmor = () => emits("update-check-armor");
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: #1e2127;
   border: 1px solid #3a3d42;
   border-radius: 6px;
@@ -407,8 +564,8 @@ const updateCheckArmor = () => emits("update-check-armor");
 }
 
 .queue-order {
-  min-width: 22px;
-  height: 22px;
+  min-width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #409eff;
   color: #fff;
@@ -427,15 +584,15 @@ const updateCheckArmor = () => emits("update-check-armor");
 }
 
 .queue-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #e0e0e0;
 }
 
 .queue-meta {
-  font-size: 11px;
-  color: #606266;
-  margin-top: 2px;
+  font-size: 10px;
+  color: #888888;
+  margin-top: 1px;
 }
 
 .queue-actions {
