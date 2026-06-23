@@ -201,6 +201,9 @@
             <el-descriptions-item label="允許空手">
               <el-switch v-model="setting.allowEmptyHanded" />
             </el-descriptions-item>
+            <el-descriptions-item label="啟用雙持">
+              <el-switch v-model="setting.enableDualWield" />
+            </el-descriptions-item>
             <el-descriptions-item label="單人自動刷王">
               <el-radio-group v-model="setting.bossSoloMode" size="small">
                 <el-radio-button label="none">不打王</el-radio-button>
@@ -559,14 +562,17 @@
     <div style="margin-top: 20px">
       <WeaponSelect
         :weapon-list="weaponList"
-        :select-weapon-list="selectWeaponList"
+        :selected-weapon-queue-main="selectWeaponListMain"
+        :selected-weapon-queue-off="selectWeaponListOff"
         :weapon-check-tag="weaponCheckTag"
         :armor-check-tag="armorCheckTag"
         :equipment-check-tag="equipmentCheckTag"
+        :enable-dual-wield="setting.enableDualWield"
         @equipment-check="equipmentCheck"
         @update-check-weapon="checkWeapon"
         @update-check-armor="checkArmor"
-        @select-weapon="selectWeapons"
+        @update:selected-weapon-queue-main="updateSelectedWeaponQueueMain"
+        @update:selected-weapon-queue-off="updateSelectedWeaponQueueOff"
       />
     </div>
   </div>
@@ -619,20 +625,22 @@ const items = computed(() => ({
   items: account.value?.items?.items || [],
   equipments: account.value?.items?.equipments || [],
 }));
-const selectWeaponList = ref([]);
+const selectWeaponListMain = ref<any[]>([]);
+const selectWeaponListOff = ref<any[]>([]);
 
 const setting = ref({
   hp: 100,
   sp: 150,
   map: "",
   weaponDuration: 20,
-  mapLevel: 2,
-  runLevel: 0,
+  mapLevel: 0,
+  runLevel: 3000,
   hpRecoveryMode: "rest",
   spRecoveryMode: "rest",
   allowEmptyHanded: false,
+  enableDualWield: false,
   bossSoloMode: "none",
-  useTeleportCrystal: false,
+  useTeleportCrystal: true,
   enableLogs: true,
   enableTimeline: true,
   refreshMode: "auto",
@@ -675,9 +683,9 @@ const medicineSetting = ref({
 });
 
 const medicineCheckTag = ref(false);
-const weaponCheckTag = ref(true);
+const weaponCheckTag = ref(false);
 const armorCheckTag = ref(false);
-const equipmentCheckTag = ref(true);
+const equipmentCheckTag = ref(false);
 
 // 防止 store→local 和 local→store 互相觸發的防護 flag
 const isUpdatingFromStore = ref(false);
@@ -697,10 +705,12 @@ watch(
       setting.value.hpRecoveryMode = newVal.setting.hpRecoveryMode || "rest";
       setting.value.spRecoveryMode = newVal.setting.spRecoveryMode || "rest";
       setting.value.allowEmptyHanded = newVal.setting.allowEmptyHanded ?? false;
+      setting.value.enableDualWield = newVal.setting.enableDualWield ?? false;
       setting.value.bossSoloMode = newVal.setting.bossSoloMode ?? "none";
       setting.value.useTeleportCrystal =
         newVal.setting.useTeleportCrystal ?? false;
-      selectWeaponList.value = newVal.selectedWeaponQueue || [];
+      selectWeaponListMain.value = newVal.selectedWeaponQueueMain || [];
+      selectWeaponListOff.value = newVal.selectedWeaponQueueOff || [];
       setting.value.partyMode = {
         enabled: newVal.setting.partyMode?.enabled ?? false,
         isLeader: newVal.setting.partyMode?.isLeader ?? false,
@@ -762,6 +772,7 @@ watch(
       battleAuto.setting.hpRecoveryMode = setting.value.hpRecoveryMode;
       battleAuto.setting.spRecoveryMode = setting.value.spRecoveryMode;
       battleAuto.setting.allowEmptyHanded = setting.value.allowEmptyHanded;
+      battleAuto.setting.enableDualWield = setting.value.enableDualWield;
       battleAuto.setting.bossSoloMode = setting.value.bossSoloMode;
       battleAuto.setting.useTeleportCrystal = setting.value.useTeleportCrystal;
       battleAuto.setting.enableLogs = setting.value.enableLogs;
@@ -853,11 +864,17 @@ const equippedWeapon = computed(() => {
     });
 });
 
-const selectWeapons = (weapons) => {
-  selectWeaponList.value = weapons;
-  // 同步存入 store，讓自動戰鬥後台循環能讀取使用者選好的武器佇列
+const updateSelectedWeaponQueueMain = (weapons: any[]) => {
+  selectWeaponListMain.value = weapons;
   if (account.value) {
-    account.value.automation.battle.selectedWeaponQueue = [...weapons];
+    account.value.automation.battle.selectedWeaponQueueMain = [...weapons];
+  }
+};
+
+const updateSelectedWeaponQueueOff = (weapons: any[]) => {
+  selectWeaponListOff.value = weapons;
+  if (account.value) {
+    account.value.automation.battle.selectedWeaponQueueOff = [...weapons];
   }
 };
 

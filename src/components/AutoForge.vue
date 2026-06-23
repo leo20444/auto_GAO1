@@ -103,6 +103,65 @@
         </el-col>
       </el-row>
 
+      <!-- 鍛造屬性總和預覽 -->
+      <el-row v-if="selectedRecipe" style="margin-top: 15px">
+        <el-col :span="24">
+          <div class="forge-preview-panel">
+            <div class="preview-title">鍛造屬性加成預覽</div>
+            <div class="preview-grid">
+              <div class="preview-item">
+                <span class="preview-label">總物攻加成</span>
+                <span class="preview-val atk">+{{ sumBonusAtk }}</span>
+              </div>
+              <div class="preview-item">
+                <span class="preview-label">總物防加成</span>
+                <span class="preview-val def">+{{ sumBonusDef }}</span>
+              </div>
+              <div class="preview-item">
+                <span class="preview-label">總幸運加成</span>
+                <span class="preview-val luck">+{{ sumBonusLuck }}</span>
+              </div>
+              <div class="preview-item">
+                <span class="preview-label">總耐久度</span>
+                <span class="preview-val durability"
+                  >+{{ sumBonusDurability }}</span
+                >
+              </div>
+              <div class="preview-item total-sum-item">
+                <span class="preview-label">全部總共</span>
+                <span class="preview-val total">+{{ totalSumOfBonus }}</span>
+              </div>
+            </div>
+
+            <!-- 附魔加成展示 -->
+            <div
+              v-if="Object.keys(sumElementBonus).length > 0"
+              class="element-bonus-preview-sec"
+            >
+              <div class="element-bonus-title">附魔加成累計：</div>
+              <div
+                style="
+                  display: flex;
+                  flex-wrap: wrap;
+                  gap: 6px;
+                  margin-top: 4px;
+                "
+              >
+                <el-tag
+                  v-for="(val, key) in sumElementBonus"
+                  :key="key"
+                  type="success"
+                  size="default"
+                  effect="dark"
+                >
+                  {{ elementBonusMap[key] || key }}: +{{ val }}
+                </el-tag>
+              </div>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
+
       <!-- Forge Favorites Configuration -->
       <el-row :gutter="20" align="middle" style="margin-top: 15px">
         <el-col
@@ -210,30 +269,129 @@
               justify-content: space-between;
               align-items: center;
               margin-bottom: 8px;
+              flex-wrap: wrap;
+              gap: 10px;
             "
           >
-            <div class="input-label" style="margin-bottom: 0">
-              放入材料配置 (背包可用素材)
-            </div>
-            <el-button
-              type="warning"
-              plain
-              size="small"
-              @click="handleResetMaterials"
-              >重製材料選定</el-button
+            <div
+              class="input-label"
+              style="
+                margin-bottom: 0;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+              "
             >
+              放入材料配置 (背包可用素材)
+              <el-tooltip
+                content="特殊材料預設僅配 1 個，不足由基礎材料填補；若基礎材料不夠，則自動遞補以保障鍛造開工。"
+                placement="top"
+              >
+                <el-icon style="color: #e6a23c; cursor: pointer"
+                  ><Warning
+                /></el-icon>
+              </el-tooltip>
+            </div>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+              "
+            >
+              <el-select
+                v-model="forgePreference"
+                size="small"
+                placeholder="配置偏好"
+                style="width: 120px"
+              >
+                <el-option label="物攻優先" value="atk" />
+                <el-option label="物防優先" value="def" />
+                <el-option label="幸運優先" value="luck" />
+                <el-option label="耐久優先" value="durability" />
+                <el-option label="總數值最高" value="total" />
+              </el-select>
+              <el-select
+                v-model="selectedEnchantPrefs"
+                multiple
+                collapse-tags
+                collapse-tags-indicator
+                size="small"
+                placeholder="附魔偏好 (可複選)"
+                style="width: 180px"
+              >
+                <el-option
+                  v-for="(label, key) in elementBonusMap"
+                  :key="key"
+                  :label="label"
+                  :value="key"
+                />
+              </el-select>
+              <el-select
+                v-model="selectedGemPrefs"
+                multiple
+                collapse-tags
+                collapse-tags-indicator
+                size="small"
+                placeholder="特殊組合附魔(可複選)"
+                style="width: 180px"
+              >
+                <el-option label="風水" value="fengshui" />
+              </el-select>
+              <el-button
+                type="primary"
+                size="small"
+                @click="handleAutoFillMaterials"
+                :disabled="!selectedRecipe"
+              >
+                自動配置
+              </el-button>
+              <el-button
+                type="warning"
+                plain
+                size="small"
+                @click="handleResetMaterials"
+                >重置</el-button
+              >
+            </div>
           </div>
           <div
             v-if="displayMaterialsList.length > 0"
             style="margin-top: 10px; margin-bottom: 10px"
           >
-            <el-input
-              v-model="searchMaterialQuery"
-              placeholder="搜尋材料名稱進行模糊篩選..."
-              clearable
-              size="default"
-              style="width: 100%"
-            />
+            <div
+              style="display: flex; align-items: center; gap: 15px; width: 100%"
+            >
+              <el-input
+                v-model="searchMaterialQuery"
+                placeholder="搜尋材料名稱進行模糊篩選..."
+                clearable
+                size="default"
+                style="flex: 1"
+              />
+              <el-select
+                v-model="materialSortPrefs"
+                multiple
+                collapse-tags
+                collapse-tags-indicator
+                size="default"
+                placeholder="材料卡牌排序 (可複選)"
+                style="width: 210px"
+              >
+                <el-option label="物攻" value="atk" />
+                <el-option label="物防" value="def" />
+                <el-option label="幸運" value="luck" />
+                <el-option label="耐久" value="durability" />
+                <el-option label="持有量" value="quantity" />
+              </el-select>
+              <el-checkbox v-model="onlyShowEnchanted" style="margin: 0">
+                僅顯示附魔材料
+              </el-checkbox>
+              <el-checkbox v-model="useBossMaterials" style="margin: 0">
+                自動配置使用BOSS材料
+              </el-checkbox>
+            </div>
           </div>
           <div v-if="displayMaterialsList.length === 0" class="empty-materials">
             背包中無可用素材，請先前往採礦或取得材料。
@@ -282,6 +440,14 @@
                   class="stat-tag durability"
                   >耐久 +{{ item.bonus_durability }}</span
                 >
+                <!-- 附魔效果標籤 -->
+                <span
+                  v-for="(val, key) in item.element_bonus"
+                  :key="key"
+                  class="stat-tag element"
+                >
+                  {{ elementBonusMap[key] || key }}: +{{ val }}
+                </span>
               </div>
               <div class="material-control">
                 <el-input-number
@@ -336,6 +502,8 @@ import {
 import { ElMessage } from "element-plus";
 import { useAccountStore } from "../store/accountStore";
 import moment from "moment";
+import elementBonusMap from "../common/elementBonusTranslation.json";
+import { Warning } from "@element-plus/icons-vue";
 
 const props = defineProps({
   userObj: Object,
@@ -367,6 +535,26 @@ const backpackMaterials = ref<any[]>([]);
 const loadingRecipes = ref(false);
 const searchMaterialQuery = ref("");
 
+const onlyShowEnchanted = ref(false);
+const useBossMaterials = ref(false);
+const bossMaterialNames = ["金牛角", "鎖鏈蛇牙", "超巨大蘑菇王傘"];
+const gemItemIds = [119, 123, 124, 125, 126];
+const specialMaterialsConfig: Record<
+  number,
+  { name: string; element_bonus?: Record<string, number> }
+> = {
+  453: { name: "月牙", element_bonus: { crescent: 1 } },
+  119: { name: "鑽石" },
+  123: { name: "綠寶石" },
+  124: { name: "藍寶石" },
+  125: { name: "紅寶石" },
+  126: { name: "紫水晶" },
+};
+const forgePreference = ref("atk");
+const selectedEnchantPrefs = ref<string[]>([]);
+const selectedGemPrefs = ref<string[]>([]);
+const materialSortPrefs = ref<string[]>([]);
+
 const displayMaterialsList = computed(() => {
   const list = [...backpackMaterials.value];
 
@@ -388,14 +576,18 @@ const displayMaterialsList = computed(() => {
     if (qtyVal > 0) {
       const exists = list.some((m) => m.item_id === itemId);
       if (!exists) {
+        const spec = specialMaterialsConfig[itemId];
         list.push({
           item_id: itemId,
-          name: store.knownItemNames[itemId] || `物品ID(${itemId})`,
+          name: spec
+            ? spec.name
+            : store.knownItemNames[itemId] || `物品ID(${itemId})`,
           quantity: 0,
           bonus_atk: 0,
           bonus_def: 0,
           bonus_luck: 0,
           bonus_durability: 0,
+          element_bonus: spec ? { ...spec.element_bonus } : {},
         });
       }
     }
@@ -405,26 +597,116 @@ const displayMaterialsList = computed(() => {
   favoriteItemIds.forEach((itemId) => {
     const exists = list.some((m) => m.item_id === itemId);
     if (!exists) {
+      const spec = specialMaterialsConfig[itemId];
       list.push({
         item_id: itemId,
-        name: store.knownItemNames[itemId] || `物品ID(${itemId})`,
+        name: spec
+          ? spec.name
+          : store.knownItemNames[itemId] || `物品ID(${itemId})`,
         quantity: 0,
         bonus_atk: 0,
         bonus_def: 0,
         bonus_luck: 0,
         bonus_durability: 0,
+        element_bonus: spec ? { ...spec.element_bonus } : {},
       });
     }
   });
 
-  // 3. 排序：已選用數量 > 0 的項目優先置頂，其次依背包持有量降序排列
+  // 3. 從本地已知特殊材料庫中，尋找符合當前選中附魔偏好或風水寶石的材料，即使當前帳號未持有也加入列表顯示
+  const allKnownMaterials = new Map<number, any>();
+
+  // (a) 尋找符合附魔偏好的特殊材料
+  if (selectedEnchantPrefs.value.length > 0) {
+    Object.entries(specialMaterialsConfig).forEach(([idStr, cfg]) => {
+      const itemId = Number(idStr);
+      if (cfg.element_bonus) {
+        let match = false;
+        selectedEnchantPrefs.value.forEach((prefKey) => {
+          if (cfg.element_bonus[prefKey] && cfg.element_bonus[prefKey] > 0) {
+            match = true;
+          }
+        });
+        if (match) {
+          allKnownMaterials.set(itemId, {
+            item_id: itemId,
+            name: cfg.name,
+            element_bonus: cfg.element_bonus,
+          });
+        }
+      }
+    });
+  }
+
+  // (b) 如果有勾選特殊寶石偏好 "風水"，將五大寶石也加入顯示候選 (持有量 0 時依然顯示)
+  if (selectedGemPrefs.value.includes("fengshui")) {
+    gemItemIds.forEach((itemId) => {
+      const cfg = specialMaterialsConfig[itemId];
+      if (cfg) {
+        allKnownMaterials.set(itemId, {
+          item_id: itemId,
+          name: cfg.name,
+          element_bonus: cfg.element_bonus || {},
+        });
+      }
+    });
+  }
+
+  allKnownMaterials.forEach((item, itemId) => {
+    const exists = list.some((m) => m.item_id === itemId);
+    if (!exists) {
+      list.push({
+        item_id: itemId,
+        name: item.name,
+        quantity: 0,
+        bonus_atk: 0,
+        bonus_def: 0,
+        bonus_luck: 0,
+        bonus_durability: 0,
+        element_bonus: { ...item.element_bonus },
+        description: "",
+      });
+    }
+  });
+
+  // 4. 排序：已選用數量 > 0 的項目優先置頂，其餘依選定排序規則排序
   list.sort((a, b) => {
     const qtyA = selectedMaterials.value[a.item_id] || 0;
     const qtyB = selectedMaterials.value[b.item_id] || 0;
 
+    // 優先級一：已選用數量 > 0 置頂
     if (qtyA > 0 && qtyB === 0) return -1;
     if (qtyA === 0 && qtyB > 0) return 1;
 
+    // 優先級二：檢查是否有勾選屬性排序
+    const activeAttrSorts = materialSortPrefs.value.filter(
+      (s) => s === "atk" || s === "def" || s === "luck" || s === "durability"
+    );
+
+    if (activeAttrSorts.length > 0) {
+      // 計算屬性數值加總分
+      const getAttrScore = (m: any) => {
+        let sum = 0;
+        if (materialSortPrefs.value.includes("atk"))
+          sum += parseFloat(m.bonus_atk || 0);
+        if (materialSortPrefs.value.includes("def"))
+          sum += parseFloat(m.bonus_def || 0);
+        if (materialSortPrefs.value.includes("luck"))
+          sum += parseFloat(m.bonus_luck || 0);
+        if (materialSortPrefs.value.includes("durability"))
+          sum += parseFloat(m.bonus_durability || 0);
+        return sum;
+      };
+
+      const scoreA = getAttrScore(a);
+      const scoreB = getAttrScore(b);
+
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA; // 屬性總和由大到小排序
+      }
+    }
+
+    // 優先級三：如果未選取屬性排序（或屬性總和相同），則依持有量由大到小排序
     return b.quantity - a.quantity;
   });
 
@@ -432,13 +714,21 @@ const displayMaterialsList = computed(() => {
 });
 
 const filteredMaterials = computed(() => {
+  let list = displayMaterialsList.value;
+
+  if (onlyShowEnchanted.value) {
+    list = list.filter(
+      (item) =>
+        (item.element_bonus && Object.keys(item.element_bonus).length > 0) ||
+        (selectedMaterials.value[item.item_id] || 0) > 0
+    );
+  }
+
   if (!searchMaterialQuery.value.trim()) {
-    return displayMaterialsList.value;
+    return list;
   }
   const query = searchMaterialQuery.value.trim().toLowerCase();
-  return displayMaterialsList.value.filter((item) =>
-    (item.name || "").toLowerCase().includes(query)
-  );
+  return list.filter((item) => (item.name || "").toLowerCase().includes(query));
 });
 
 // 防止 store→local 和 local→store 互相觸發的防護 flag
@@ -458,6 +748,9 @@ interface ForgeFavorite {
   weapon_name: string;
   result_item_id: number;
   materials: Array<{ item_id: number; quantity: number; name?: string }>;
+  forgePreference?: string;
+  selectedEnchantPrefs?: string[];
+  selectedGemPrefs?: string[];
 }
 
 const activeFavoriteId = ref<string>("");
@@ -592,9 +885,23 @@ const fetchRecipesAndMaterials = async () => {
   loadingRecipes.value = true;
   try {
     const data = await props.userObj.getForgeRecipes();
+    const invData = await props.userObj.item();
     if (data) {
       recipes.value = data.recipes || [];
-      backpackMaterials.value = data.inventory || [];
+      const invItems = invData?.items || [];
+      const mappedInventory = (data.inventory || []).map((m: any) => {
+        const matchingInvItem = invItems.find((i: any) => {
+          if (m.item_id && i.item_id && m.item_id === i.item_id) return true;
+          if (m.name && i.name && m.name === i.name) return true;
+          return false;
+        });
+        return {
+          ...m,
+          element_bonus: matchingInvItem?.element_bonus || {},
+          description: matchingInvItem?.description || "",
+        };
+      });
+      backpackMaterials.value = mappedInventory;
     }
   } catch (error) {
     console.error("fetchRecipesAndMaterials error:", error);
@@ -706,10 +1013,19 @@ const totalSelectedQuantity = computed(() => {
 });
 
 const isFormValid = computed(() => {
+  const hasInsufficient = Object.entries(selectedMaterials.value).some(
+    ([idStr, qty]) => {
+      const itemId = Number(idStr);
+      const item = displayMaterialsList.value.find((m) => m.item_id === itemId);
+      const owned = item ? item.quantity : 0;
+      return Number(qty) > owned;
+    }
+  );
   return (
     Number(result_item_id.value) > 0 &&
     weapon_name.value.trim() !== "" &&
-    Number(totalSelectedQuantity.value) === Number(requiredQuantity.value)
+    Number(totalSelectedQuantity.value) === Number(requiredQuantity.value) &&
+    !hasInsufficient
   );
 });
 
@@ -735,6 +1051,272 @@ const alertType = computed(() => {
   if (cur < req) return "warning";
   return "error";
 });
+
+// 即時計算屬性加總
+const sumBonusAtk = computed(() => {
+  let sum = 0;
+  for (const [idStr, qty] of Object.entries(selectedMaterials.value)) {
+    const qtyNum = Number(qty);
+    if (qtyNum > 0) {
+      const itemId = Number(idStr);
+      const item = backpackMaterials.value.find((m) => m.item_id === itemId);
+      if (item) {
+        sum += parseFloat(item.bonus_atk || 0) * qtyNum;
+      }
+    }
+  }
+  return parseFloat(sum.toFixed(2));
+});
+
+const sumBonusDef = computed(() => {
+  let sum = 0;
+  for (const [idStr, qty] of Object.entries(selectedMaterials.value)) {
+    const qtyNum = Number(qty);
+    if (qtyNum > 0) {
+      const itemId = Number(idStr);
+      const item = backpackMaterials.value.find((m) => m.item_id === itemId);
+      if (item) {
+        sum += parseFloat(item.bonus_def || 0) * qtyNum;
+      }
+    }
+  }
+  return parseFloat(sum.toFixed(2));
+});
+
+const sumBonusLuck = computed(() => {
+  let sum = 0;
+  for (const [idStr, qty] of Object.entries(selectedMaterials.value)) {
+    const qtyNum = Number(qty);
+    if (qtyNum > 0) {
+      const itemId = Number(idStr);
+      const item = backpackMaterials.value.find((m) => m.item_id === itemId);
+      if (item) {
+        sum += parseFloat(item.bonus_luck || 0) * qtyNum;
+      }
+    }
+  }
+  return parseFloat(sum.toFixed(2));
+});
+
+const sumBonusDurability = computed(() => {
+  let sum = 0;
+  for (const [idStr, qty] of Object.entries(selectedMaterials.value)) {
+    const qtyNum = Number(qty);
+    if (qtyNum > 0) {
+      const itemId = Number(idStr);
+      const item = backpackMaterials.value.find((m) => m.item_id === itemId);
+      if (item) {
+        sum += parseFloat(item.bonus_durability || 0) * qtyNum;
+      }
+    }
+  }
+  return parseFloat(sum.toFixed(2));
+});
+
+const totalSumOfBonus = computed(() => {
+  return parseFloat(
+    (
+      sumBonusAtk.value +
+      sumBonusDef.value +
+      sumBonusLuck.value +
+      sumBonusDurability.value
+    ).toFixed(2)
+  );
+});
+
+const sumElementBonus = computed(() => {
+  const sumObj: Record<string, number> = {};
+  for (const [idStr, qty] of Object.entries(selectedMaterials.value)) {
+    const qtyNum = Number(qty);
+    if (qtyNum > 0) {
+      const itemId = Number(idStr);
+      const item = backpackMaterials.value.find((m) => m.item_id === itemId);
+      if (item && item.element_bonus) {
+        for (const [key, val] of Object.entries(item.element_bonus)) {
+          const valNum = Number(val) || 0;
+          sumObj[key] = (sumObj[key] || 0) + valNum * qtyNum;
+        }
+      }
+    }
+  }
+  return sumObj;
+});
+
+// 自動優選配置方法
+const handleAutoFillMaterials = () => {
+  if (!selectedRecipe.value) {
+    ElMessage.warning("請先選擇要鍛造的配方");
+    return;
+  }
+  const reqQty = requiredQuantity.value;
+  if (reqQty <= 0) return;
+
+  // 1. 準備材料池 (使用包含跨帳號顯示與已選用之完整清單)
+  let pool = [...displayMaterialsList.value];
+
+  // 2. 初始化分配對照表，預設均分配 0 個
+  const newSelected: Record<number, number> = {};
+  backpackMaterials.value.forEach((m) => {
+    newSelected[m.item_id] = 0;
+  });
+  pool.forEach((m) => {
+    newSelected[m.item_id] = 0;
+  });
+
+  // 安全防護：若沒有勾選 BOSS，則過濾排除所有 BOSS 材料，任何階段都不允許使用
+  if (!useBossMaterials.value) {
+    pool = pool.filter((m) => !bossMaterialNames.includes(m.name));
+  }
+
+  // 安全防護：對於寶石，若未勾選「風水」，任何階段都不允許使用
+  const isFengshuiSelected = selectedGemPrefs.value.includes("fengshui");
+  pool = pool.filter((m) => {
+    if (gemItemIds.includes(m.item_id)) {
+      return isFengshuiSelected;
+    }
+    return true;
+  });
+
+  // 輔助函式：判斷材料是否為「特殊/附魔材料」
+  const isSpecialMaterial = (m: any) => {
+    // 狀況 A：它是風水寶石
+    const isGem = gemItemIds.includes(m.item_id);
+    if (isGem && isFengshuiSelected) return true;
+
+    // 狀況 B：它帶有選中的偏好附魔（且該附魔加成大於 0）
+    let hasEnchant = false;
+    if (selectedEnchantPrefs.value.length > 0 && m.element_bonus) {
+      selectedEnchantPrefs.value.forEach((prefKey) => {
+        if (
+          m.element_bonus[prefKey] &&
+          parseFloat(m.element_bonus[prefKey]) > 0
+        ) {
+          hasEnchant = true;
+        }
+      });
+    }
+    return hasEnchant;
+  };
+
+  // 3. 排序規則（用於決定哪些特殊材料優先卡位，以及哪些基礎材料優先補滿）
+  const getSortScore = (m: any) => {
+    let baseVal = 0;
+    if (forgePreference.value === "atk") {
+      baseVal = parseFloat(m.bonus_atk || 0);
+    } else if (forgePreference.value === "def") {
+      baseVal = parseFloat(m.bonus_def || 0);
+    } else if (forgePreference.value === "luck") {
+      baseVal = parseFloat(m.bonus_luck || 0);
+    } else if (forgePreference.value === "durability") {
+      baseVal = parseFloat(m.bonus_durability || 0);
+    } else if (forgePreference.value === "total") {
+      baseVal =
+        parseFloat(m.bonus_atk || 0) +
+        parseFloat(m.bonus_def || 0) +
+        parseFloat(m.bonus_luck || 0) +
+        parseFloat(m.bonus_durability || 0);
+    }
+
+    // 附魔加分 (符合偏好且帶有附魔的權重為 1,000,000)
+    let enchantScore = 0;
+    if (selectedEnchantPrefs.value.length > 0 && m.element_bonus) {
+      selectedEnchantPrefs.value.forEach((prefKey) => {
+        if (m.element_bonus[prefKey]) {
+          enchantScore += parseFloat(m.element_bonus[prefKey]) * 1000000;
+        }
+      });
+    }
+
+    // 風水寶石加分 (10,000,000)
+    let gemScore = 0;
+    if (gemItemIds.includes(m.item_id) && isFengshuiSelected) {
+      gemScore = 10000000;
+    }
+
+    // 非 BOSS 普通材料優先分 (10,000) (寶石不在此限)
+    let normalScore = 0;
+    if (
+      !bossMaterialNames.includes(m.name) &&
+      !gemItemIds.includes(m.item_id)
+    ) {
+      normalScore = 10000;
+    }
+
+    return baseVal + enchantScore + gemScore + normalScore;
+  };
+
+  // 分配邏輯
+  let remaining = reqQty;
+
+  // --- 階段一：特殊材料卡位（每種最多先放 1 個，即使為 0 也強行配置 1 個以顯示紅色不足警告） ---
+  let specialPool = pool.filter(isSpecialMaterial);
+  specialPool.sort((a, b) => getSortScore(b) - getSortScore(a));
+
+  for (const m of specialPool) {
+    if (remaining <= 0) break;
+    newSelected[m.item_id] = 1;
+    remaining -= 1;
+  }
+
+  // --- 階段二：普通材料填補（不限數量） ---
+  let normalPool = pool.filter((m) => !isSpecialMaterial(m));
+  normalPool.sort((a, b) => getSortScore(b) - getSortScore(a));
+
+  for (const m of normalPool) {
+    if (remaining <= 0) break;
+    if (m.quantity > 0) {
+      const take = Math.min(m.quantity, remaining);
+      newSelected[m.item_id] = take;
+      remaining -= take;
+    }
+  }
+
+  // --- 階段三：保底解鎖填補 ---
+  if (remaining > 0) {
+    for (const m of specialPool) {
+      if (remaining <= 0) break;
+      const alreadyTaken = newSelected[m.item_id];
+      const available = m.quantity - alreadyTaken;
+      if (available > 0) {
+        const take = Math.min(available, remaining);
+        newSelected[m.item_id] += take;
+        remaining -= take;
+      }
+    }
+  }
+
+  // 4. 套用分配結果
+  selectedMaterials.value = newSelected;
+
+  if (remaining > 0) {
+    ElMessage.warning(
+      `背包材料總數不足以滿足配方需求，還差 ${remaining} 個材料`
+    );
+  } else {
+    ElMessage.success(
+      `已依「${getPreferenceName(
+        forgePreference.value
+      )}」自動配置材料！特殊材料各僅配入 1 個以節省資源，不足處由基礎材料填補。`
+    );
+  }
+};
+
+const getPreferenceName = (pref: string) => {
+  switch (pref) {
+    case "atk":
+      return "物攻優先";
+    case "def":
+      return "物防優先";
+    case "luck":
+      return "幸運優先";
+    case "durability":
+      return "耐久優先";
+    case "total":
+      return "總數值最高";
+    default:
+      return "預設";
+  }
+};
 
 const handleAutoForge = async () => {
   if (!result_item_id.value) {
@@ -873,6 +1455,17 @@ const handleSelectFavorite = (id: string) => {
       newMats[m.item_id] = m.quantity;
     });
     selectedMaterials.value = newMats;
+
+    if (fav.forgePreference) {
+      forgePreference.value = fav.forgePreference;
+    }
+    if (fav.selectedEnchantPrefs) {
+      selectedEnchantPrefs.value = [...fav.selectedEnchantPrefs];
+    }
+    if (fav.selectedGemPrefs) {
+      selectedGemPrefs.value = [...fav.selectedGemPrefs];
+    }
+
     ElMessage.success(`已載入組合：${fav.favoriteName}`);
   }
 };
@@ -916,6 +1509,9 @@ const handleSaveFavorite = () => {
     weapon_name: weapon_name.value,
     result_item_id: result_item_id.value,
     materials: mats,
+    forgePreference: forgePreference.value,
+    selectedEnchantPrefs: [...selectedEnchantPrefs.value],
+    selectedGemPrefs: [...selectedGemPrefs.value],
   };
 
   favorites.value.push(newFav);
@@ -950,6 +1546,11 @@ const handleUpdateFavorite = () => {
   favorites.value[favIndex].weapon_name = weapon_name.value;
   favorites.value[favIndex].result_item_id = result_item_id.value;
   favorites.value[favIndex].materials = mats;
+  favorites.value[favIndex].forgePreference = forgePreference.value;
+  favorites.value[favIndex].selectedEnchantPrefs = [
+    ...selectedEnchantPrefs.value,
+  ];
+  favorites.value[favIndex].selectedGemPrefs = [...selectedGemPrefs.value];
 
   saveFavoritesToStorage();
   ElMessage.success(
@@ -1030,6 +1631,87 @@ onMounted(async () => {
 
 .tag-item {
   margin-left: 4px;
+}
+
+/* 鍛造屬性總和預覽 */
+.forge-preview-panel {
+  background-color: #1a1d21;
+  border: 1px solid #2d3139;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.preview-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #c0c4cc;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed #2d3139;
+  padding-bottom: 6px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  background-color: #111316;
+  border: 1px solid #252830;
+  border-radius: 4px;
+  padding: 6px 10px;
+}
+
+.preview-label {
+  font-size: 11px;
+  color: #909399;
+}
+
+.preview-val {
+  font-size: 14px;
+  font-weight: bold;
+  margin-top: 2px;
+}
+
+.preview-val.atk {
+  color: #f56c6c;
+}
+
+.preview-val.def {
+  color: #409eff;
+}
+
+.preview-val.luck {
+  color: #e6a23c;
+}
+
+.preview-val.durability {
+  color: #67c23a;
+}
+
+.preview-val.total {
+  color: #a85fec;
+}
+
+.total-sum-item {
+  border-color: #5b2c95;
+  background-color: rgba(168, 95, 236, 0.05);
+}
+
+.element-bonus-preview-sec {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #2d3139;
+}
+
+.element-bonus-title {
+  font-size: 12px;
+  color: #909399;
+  font-weight: bold;
 }
 
 .count-display {
@@ -1135,6 +1817,12 @@ onMounted(async () => {
   background-color: rgba(103, 194, 58, 0.15);
   color: #67c23a;
   border: 1px solid rgba(103, 194, 58, 0.3);
+}
+
+.stat-tag.element {
+  background-color: rgba(168, 95, 236, 0.15);
+  color: #b37feb;
+  border: 1px solid rgba(168, 95, 236, 0.3);
 }
 
 .material-control {

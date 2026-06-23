@@ -1,19 +1,57 @@
 <template>
   <div class="auto-recycle-module">
     <el-card shadow="never" class="inner-card">
-      <el-row :gutter="20" align="middle">
-        <el-col :span="14">
+      <!-- 篩選主控制區 -->
+      <el-row :gutter="20" align="middle" style="margin-bottom: 15px">
+        <el-col
+          :xs="24"
+          :sm="6"
+          style="margin-bottom: 10px; sm-margin-bottom: 0"
+        >
+          <div class="input-label">當前耐久低於</div>
           <el-input-number
             v-model="durability"
             :min="0"
-            placeholder="耐久度閾值"
+            placeholder="當前耐久度"
             style="width: 100%"
             @change="filteredWeapons"
-          >
-            <template #prefix>耐久小於</template>
-          </el-input-number>
+          />
         </el-col>
-        <el-col :span="10">
+        <el-col
+          :xs="24"
+          :sm="6"
+          style="margin-bottom: 10px; sm-margin-bottom: 0"
+        >
+          <div class="input-label">最大耐久低於</div>
+          <el-input-number
+            v-model="maxDurability"
+            :min="0"
+            placeholder="最大耐久度"
+            style="width: 100%"
+            @change="filteredWeapons"
+          />
+        </el-col>
+        <el-col
+          :xs="24"
+          :sm="7"
+          style="margin-bottom: 10px; sm-margin-bottom: 0"
+        >
+          <div
+            style="display: flex; align-items: center; justify-content: center"
+          >
+            <el-radio-group
+              v-model="filterType"
+              size="default"
+              @change="filteredWeapons"
+              style="width: 100%"
+            >
+              <el-radio-button label="all">全部</el-radio-button>
+              <el-radio-button label="weapon">武器</el-radio-button>
+              <el-radio-button label="armor">防具</el-radio-button>
+            </el-radio-group>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="5">
           <el-button
             type="warning"
             size="large"
@@ -24,7 +62,52 @@
         </el-col>
       </el-row>
 
-      <el-divider border-style="dashed" />
+      <!-- 快速操作與防呆設定區 -->
+      <el-row :gutter="20" align="middle" class="action-helper-row">
+        <el-col
+          :xs="24"
+          :sm="12"
+          style="
+            margin-bottom: 10px;
+            sm-margin-bottom: 0;
+            display: flex;
+            align-items: center;
+          "
+        >
+          <el-switch
+            v-model="autoSelectAll"
+            active-text="自動勾選篩選結果"
+            @change="filteredWeapons"
+          />
+          <el-tooltip
+            content="開啟時，調整條件或切換分類會自動勾選所有符合且未裝備的裝備；關閉時則需要手動勾選或點擊一鍵選取。"
+            placement="top"
+          >
+            <el-icon style="margin-left: 6px; color: #909399; cursor: pointer"
+              ><QuestionFilled
+            /></el-icon>
+          </el-tooltip>
+        </el-col>
+        <el-col
+          :xs="24"
+          :sm="12"
+          style="display: flex; justify-content: flex-end; gap: 10px"
+        >
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            @click="selectAllUnequipped"
+          >
+            一鍵選取 (未裝備)
+          </el-button>
+          <el-button size="small" type="info" plain @click="clearAllSelection">
+            清除選取
+          </el-button>
+        </el-col>
+      </el-row>
+
+      <el-divider border-style="dashed" style="margin: 15px 0" />
 
       <div class="table-container">
         <el-table
@@ -36,17 +119,60 @@
           class="dark-table"
           @selection-change="handleSelectionChange"
         >
-          <el-table-column type="selection" width="55" align="center" />
-          <el-table-column prop="name" label="名稱" min-width="120" />
+          <el-table-column
+            type="selection"
+            :selectable="isSelectable"
+            width="55"
+            align="center"
+          />
+          <el-table-column prop="name" label="名稱" min-width="150" />
+          <el-table-column label="類別" width="120" align="center">
+            <template #default="{ row }">
+              <el-tag
+                :type="typeList.weapon.includes(row.typeName) ? '' : 'warning'"
+                size="small"
+                effect="dark"
+              >
+                {{ typeList.weapon.includes(row.typeName) ? "武器" : "防具" }}
+              </el-tag>
+              <span style="margin-left: 8px">{{ row.typeName }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="手持" width="80" align="center">
+            <template #default="{ row }">
+              <span v-if="row.hand_type === 'two_hand'">雙手</span>
+              <span v-else-if="row.hand_type === 'one_hand'">單手</span>
+              <span v-else style="color: #606266">-</span>
+            </template>
+          </el-table-column>
           <el-table-column
             prop="durability"
             label="耐久"
             width="80"
             align="center"
-          />
+          >
+            <template #default="{ row }">
+              <span
+                :style="{ color: row.durability <= 5 ? '#f56c6c' : '#e1e2e4' }"
+              >
+                {{ row.durability }}
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column prop="atk" label="ATK" width="70" align="center" />
           <el-table-column prop="def" label="DEF" width="70" align="center" />
-          <el-table-column prop="id" label="ID" width="80" align="center" />
+          <el-table-column label="狀態" width="90" align="center">
+            <template #default="{ row }">
+              <el-tag
+                :type="row.status === '已裝備' ? 'danger' : 'info'"
+                size="small"
+                effect="plain"
+              >
+                {{ row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="id" label="ID" width="90" align="center" />
         </el-table>
       </div>
     </el-card>
@@ -62,7 +188,6 @@
           >確定要回收這
           <b style="color: #f56c6c">{{ checkedWeapons.length }}</b>
           個裝備嗎？</span
-        >
         >
         <div style="margin-top: 10px; font-size: 12px; color: #909399">
           此操作不可逆，將會獲得材料。
@@ -99,24 +224,50 @@
 <script setup lang="ts">
 import { ElMessage } from "element-plus";
 import { ref, defineProps, onMounted, nextTick } from "vue";
+import { QuestionFilled } from "@element-plus/icons-vue";
 import sleep from "../common/sleep";
+import typeList from "../common/typeList";
 
 const props = defineProps({
   userObj: Object,
 });
 
-const durability = ref(10);
-const weapon = ref([]);
-const selectedWeapon = ref([]);
-const checkedWeapons = ref([]);
-const multipleTableRef = ref(null);
+const durability = ref(100);
+const maxDurability = ref(10000);
+const weapon = ref<any[]>([]);
+const selectedWeapon = ref<any[]>([]);
+const checkedWeapons = ref<any[]>([]);
+const multipleTableRef = ref<any>(null);
 const dialogVisible = ref(false);
 const recyclingActive = ref(false);
 const recycleProgress = ref(0);
 const emergencyButton = ref(false);
 
+const filterType = ref("all");
+const autoSelectAll = ref(false);
+
 const handleSelectionChange = (val: any[]) => {
   checkedWeapons.value = val;
+};
+
+const isSelectable = (row: any) => {
+  return row.status !== "已裝備" && row.locked !== true;
+};
+
+const selectAllUnequipped = () => {
+  if (multipleTableRef.value) {
+    selectedWeapon.value.forEach((row) => {
+      if (isSelectable(row)) {
+        multipleTableRef.value.toggleRowSelection(row, true);
+      }
+    });
+  }
+};
+
+const clearAllSelection = () => {
+  if (multipleTableRef.value) {
+    multipleTableRef.value.clearSelection();
+  }
 };
 
 const confirmRecycle = () => {
@@ -132,8 +283,8 @@ const handleRecycle = async () => {
   recyclingActive.value = true;
   emergencyButton.value = false;
 
-  let total = checkedWeapons.value.length;
-  let recycleAry = [...checkedWeapons.value];
+  const total = checkedWeapons.value.length;
+  const recycleAry = [...checkedWeapons.value];
 
   for (let i = 0; i < recycleAry.length; i++) {
     if (emergencyButton.value) break;
@@ -167,7 +318,7 @@ const getItem = async () => {
   try {
     const res = await props.userObj.item();
     if (res) {
-      weapon.value = res.equipments;
+      weapon.value = res.equipments || [];
       filteredWeapons();
     }
   } catch (e) {
@@ -176,15 +327,33 @@ const getItem = async () => {
 };
 
 const filteredWeapons = () => {
-  selectedWeapon.value = weapon.value.filter(
-    (item) => item.durability <= durability.value
-  );
+  selectedWeapon.value = weapon.value.filter((item) => {
+    // 檢查當前耐久度
+    const durMatch = item.durability <= durability.value;
+    if (!durMatch) return false;
+
+    // 檢查最大耐久度
+    const maxDurVal = item.max_durability || item.fullDurability || 0;
+    const maxDurMatch = maxDurVal <= maxDurability.value;
+    if (!maxDurMatch) return false;
+
+    // 檢查分類
+    const isWeapon = typeList.weapon.includes(item.typeName);
+    if (filterType.value === "weapon") return isWeapon;
+    if (filterType.value === "armor") return !isWeapon;
+    return true;
+  });
+
   nextTick(() => {
     if (multipleTableRef.value) {
       multipleTableRef.value.clearSelection();
-      selectedWeapon.value.forEach((row) => {
-        multipleTableRef.value.toggleRowSelection(row, true);
-      });
+      if (autoSelectAll.value) {
+        selectedWeapon.value.forEach((row) => {
+          if (isSelectable(row)) {
+            multipleTableRef.value.toggleRowSelection(row, true);
+          }
+        });
+      }
     }
   });
 };
@@ -195,9 +364,23 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.input-label {
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
 .inner-card {
   background-color: #141619 !important;
   border: 1px solid #2d2f31 !important;
+}
+
+.action-helper-row {
+  background-color: #0d0f11;
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: 1px dashed #2d2f31;
 }
 
 .table-container {
