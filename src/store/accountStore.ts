@@ -5,9 +5,6 @@ import moment from "moment";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import map, { secretRealmConfig } from "../common/mapping";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import typeList from "../common/typeList";
 
 function getMapIdByName(name: string): number | null {
   if (!name) return null;
@@ -631,39 +628,12 @@ async function startBattle(token: string) {
           acc.items.items = itemsRes.items || [];
         }
         const weaponList = acc.items.equipments;
-        // 優先使用使用者在 UI 手動選好的佇列；若為空則回退到依耐久篩選
+        // 僅使用使用者在 UI 設定的佇列，若為空則不自動填入裝備（移除自動回填邏輯）
         const selectWeaponListMain =
-          acc.automation.battle.selectedWeaponQueueMain.length > 0
-            ? acc.automation.battle.selectedWeaponQueueMain
-            : acc.automation.battle.setting.weaponDuration
-            ? weaponList.filter(
-                (w: any) =>
-                  w.durability >=
-                    acc.automation.battle.setting.weaponDuration &&
-                  typeList.weapon.includes(w.typeName)
-              )
-            : [];
-
+          acc.automation.battle.selectedWeaponQueueMain || [];
         const selectWeaponListOff =
-          acc.automation.battle.selectedWeaponQueueOff.length > 0
-            ? acc.automation.battle.selectedWeaponQueueOff
-            : acc.automation.battle.setting.weaponDuration
-            ? weaponList.filter(
-                (w: any) =>
-                  w.durability >=
-                    acc.automation.battle.setting.weaponDuration &&
-                  typeList.weapon.includes(w.typeName) &&
-                  w.hand_type === "one_hand"
-              )
-            : [];
-
-        // 独立防具佇列
-        const selectArmorList =
-          acc.automation.battle.selectedArmorQueue.length > 0
-            ? acc.automation.battle.selectedArmorQueue
-            : weaponList.filter((w: any) =>
-                typeList.armor.includes(w.typeName)
-              );
+          acc.automation.battle.selectedWeaponQueueOff || [];
+        const selectArmorList = acc.automation.battle.selectedArmorQueue || [];
 
         // 2. 初始化 weaponChecker
         const myWeaponChecker = new weaponChecker(
