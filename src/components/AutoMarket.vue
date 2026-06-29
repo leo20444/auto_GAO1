@@ -105,16 +105,18 @@
           <span
             class="log-msg"
             :style="{
-              color: log.message.includes('成功')
+              color: (log.m || '').includes('成功')
                 ? '#67C23A'
-                : log.message.includes('失敗') || log.message.includes('出錯')
+                : (log.m || '').includes('失敗') ||
+                  (log.m || '').includes('出錯')
                 ? '#F56C6C'
-                : log.message.includes('搶購') || log.message.includes('購買:')
+                : (log.m || '').includes('搶購') ||
+                  (log.m || '').includes('購買:')
                 ? '#E6A23C'
                 : '#00cdf0',
             }"
           >
-            {{ log.message }}
+            {{ log.m }}
           </span>
         </div>
       </div>
