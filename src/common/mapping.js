@@ -8,14 +8,8 @@ const map = [
   { name: "蘑菇園", id: 4 },
   { name: "菇菇仙境", id: 4001 },
   { name: "圓明園", id: 5 },
-  { name: "非洲大草原", id: 6 },
-  { name: "空中花園", id: 7 },
-  { name: "青藏高原", id: 8 },
-  { name: "火鳳燎原", id: 9 },
-  { name: "骷髏墓園", id: 10 },
-  { name: "鷹洞", id: 11 },
-  { name: "蝙蝠洞", id: 12 },
-  { name: "老鼠洞", id: 13 },
+  { name: "黃石國家公園", id: 6 },
+  { name: "綠水管", id: 6001 },
 ];
 
 // 秘徑設定對照表
@@ -23,6 +17,7 @@ export const secretRealmConfig = {
   1001: { parentId: 1, enterFloor: 16, parentName: "大草原" },
   2001: { parentId: 2, enterFloor: 18, parentName: "猛牛園" },
   4001: { parentId: 4, enterFloor: 12, parentName: "蘑菇園" },
+  6001: { parentId: 6, enterFloor: 14, parentName: "黃石國家公園" },
 };
 
 export default map;

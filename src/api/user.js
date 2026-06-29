@@ -78,6 +78,7 @@ function user(inputToken, username = "", password = "") {
     3: "childrens_park",
     4: "mushroom_garden",
     5: "yuanmingyuan",
+    6: "yellowstone",
   };
 
   // 輔助函式：標準化資料結構，讓舊的元件能繼續運作

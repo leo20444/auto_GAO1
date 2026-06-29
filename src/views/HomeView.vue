@@ -650,6 +650,8 @@ const getWaitingBossStatus = (acc: any) => {
     mushroom_garden: 4,
     圓明園: 5,
     yuanmingyuan: 5,
+    黃石國家公園: 6,
+    yellowstone: 6,
   };
 
   const zoneName = acc.profile.zoneName;
@@ -662,6 +664,7 @@ const getWaitingBossStatus = (acc: any) => {
     3: 18,
     4: 24,
     5: 20,
+    6: 25,
   };
 
   const isBossFloor = bossFloorConfig[currentMapId] === floor && floor > 0;

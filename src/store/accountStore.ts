@@ -679,7 +679,8 @@ async function startBattle(token: string) {
         const isTargetingSecretRealm =
           targetMapIdForSecret === 1001 ||
           targetMapIdForSecret === 2001 ||
-          targetMapIdForSecret === 4001;
+          targetMapIdForSecret === 4001 ||
+          targetMapIdForSecret === 6001;
 
         const currentMapForSecret = acc.profile.zoneName;
         const currentMapIdForSecret = getMapIdByName(currentMapForSecret);
@@ -690,6 +691,8 @@ async function startBattle(token: string) {
             ? secretRealmConfig[2001].enterFloor
             : currentMapIdForSecret === 4
             ? secretRealmConfig[4001].enterFloor
+            : currentMapIdForSecret === 6
+            ? secretRealmConfig[6001].enterFloor
             : undefined;
 
         let hasAttemptedSecretRealm = false;

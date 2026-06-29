@@ -286,9 +286,12 @@ class autoBattleChecker {
 
     const targetMapId = getMapIdByName(this.setting.map);
 
-    // 2. 判斷是否為秘徑地圖 (1001 草原秘徑, 2001 被詛咒的寺院, 4001 菇菇仙境)
+    // 2. 判斷是否為秘徑地圖 (1001 草原秘徑, 2001 被詛咒的寺院, 4001 菇菇仙境, 6001 綠水管)
     const isSpecialMap =
-      targetMapId === 1001 || targetMapId === 2001 || targetMapId === 4001;
+      targetMapId === 1001 ||
+      targetMapId === 2001 ||
+      targetMapId === 4001 ||
+      targetMapId === 6001;
     if (isSpecialMap && currentMapId !== targetMapId) {
       if (await this.checkSpecialMap()) {
         return true;
@@ -526,6 +529,7 @@ class autoBattleChecker {
 }
 
 function getMapIdByName(name) {
+  if (!name) return null;
   const found = map.find((item) => item.name === name);
   return found ? found.id : null;
 }
