@@ -115,6 +115,8 @@ export interface Account {
       setting: {
         zone: string;
         duration: number;
+        useMedicine: boolean;
+        medicineSpId: string;
       };
     };
     lottery?: {
@@ -199,6 +201,8 @@ watch(
         miningSetting: {
           zone: acc.automation.mining.setting?.zone ?? "forest",
           duration: acc.automation.mining.setting?.duration ?? 15,
+          useMedicine: acc.automation.mining.setting?.useMedicine ?? true,
+          medicineSpId: acc.automation.mining.setting?.medicineSpId ?? "",
         },
         lottery: acc.automation.lottery,
         marketSetting: {
@@ -441,6 +445,8 @@ function addAccount(token: string, username = "", password = "") {
         setting: {
           zone: savedSetting.miningSetting?.zone ?? "forest",
           duration: savedSetting.miningSetting?.duration ?? 15,
+          useMedicine: savedSetting.miningSetting?.useMedicine ?? true,
+          medicineSpId: savedSetting.miningSetting?.medicineSpId ?? "",
         },
       },
       lottery: {
@@ -525,6 +531,88 @@ function addLog(
       acc.automation[type].logs.shift();
     }
   }
+}
+
+async function teleportOrMoveToTown(acc: Account): Promise<any> {
+  const currentMapId = getMapIdByName(acc.profile.zoneName);
+  const isDead = acc.profile.hp <= 0 || acc.profile.actionStatus === "重生";
+
+  // 🌟 安全防呆: 若已在起始之鎮，或角色處於死亡/重生狀態，絕對不消耗也不在野外購買水晶
+  if (currentMapId === 0 || isDead) {
+    if (currentMapId !== 0) {
+      // 處於死亡狀態但尚未在城內，直接發送普通 move(0) 返回，不浪費水晶
+      return await acc.userObj.move(0);
+    }
+    return acc.profile;
+  }
+
+  const useCrystal = acc.automation.battle.setting.useTeleportCrystal;
+  let crystal = acc.items?.items?.find(
+    (item: any) => item.item_id === 173 || item.id === 173
+  );
+  let quantity = crystal ? crystal.quantity : 0;
+
+  // 如果啟用轉移水晶但庫存為 0，嘗試直接在野外自動購買補貨
+  if (useCrystal && quantity <= 0) {
+    addLog(
+      acc,
+      "battle",
+      "偵測到啟用轉移水晶但庫存為 0，嘗試於野外向商店自動補貨..."
+    );
+    try {
+      const buyRes = await acc.userObj.buyShopItem(22, 10);
+      if (buyRes && !buyRes.error) {
+        addLog(acc, "battle", "野外補貨轉移水晶成功！已購買 10 個。");
+        const itemsRes = await acc.userObj.item();
+        if (itemsRes) {
+          acc.items.equipments = itemsRes.equipments || [];
+          acc.items.items = itemsRes.items || [];
+        }
+        crystal = acc.items?.items?.find(
+          (item: any) => item.item_id === 173 || item.id === 173
+        );
+        quantity = crystal ? crystal.quantity : 0;
+      } else {
+        addLog(
+          acc,
+          "battle",
+          `野外自動補貨水晶失敗: ${
+            buyRes?.message || "未知錯誤"
+          }，退化為普通回城。`
+        );
+      }
+    } catch (e: any) {
+      console.error("[野外補水晶] 失敗:", e);
+      addLog(acc, "battle", `野外補貨水晶出錯，退化為普通回城`);
+    }
+  }
+
+  if (useCrystal && quantity > 0) {
+    addLog(
+      acc,
+      "battle",
+      "偵測到啟用轉移水晶且庫存 > 0，發送傳送水晶回城請求..."
+    );
+    try {
+      const useRes = await acc.userObj.useTeleportCrystal();
+      if (useRes && !useRes.error) {
+        addLog(acc, "battle", "使用轉移水晶回城成功！");
+        if (crystal) crystal.quantity -= 1;
+        const profile = await acc.userObj.getProfile();
+        return profile;
+      } else {
+        addLog(
+          acc,
+          "battle",
+          `使用轉移水晶失敗: ${useRes?.message || "未知錯誤"}，退化為普通回城`
+        );
+      }
+    } catch (e: any) {
+      console.error("[水晶回城] 失敗:", e);
+      addLog(acc, "battle", `使用轉移水晶出錯，退化為普通回城`);
+    }
+  }
+  return await acc.userObj.move(0);
 }
 
 function safeUpdateProfile(acc: Account, newProfile: any) {
@@ -650,7 +738,7 @@ async function startBattle(token: string) {
               "battle",
               `[組隊撤退] 偵測到隊友死亡或隊長已回村，隊員跟隨撤退回村！`
             );
-            const moveRes = await acc.userObj.move(0);
+            const moveRes = await teleportOrMoveToTown(acc);
             if (moveRes && !moveRes.error) {
               safeUpdateProfile(acc, moveRes);
             }
@@ -1004,7 +1092,7 @@ async function startBattle(token: string) {
                     // 隊長帶頭 move(0)
                     let leaderNewProfile: any = null;
                     try {
-                      leaderNewProfile = await acc.userObj.move(0);
+                      leaderNewProfile = await teleportOrMoveToTown(acc);
                       if (leaderNewProfile && !leaderNewProfile.error) {
                         safeUpdateProfile(acc, leaderNewProfile);
                       }
@@ -1156,7 +1244,9 @@ async function startBattle(token: string) {
                               "battle",
                               `[組隊撤退] 偵測到隊友 ${member.character_name} 死亡，全員退回起始之鎮重整！`
                             );
-                            const leaderNewProfile = await acc.userObj.move(0);
+                            const leaderNewProfile = await teleportOrMoveToTown(
+                              acc
+                            );
                             if (leaderNewProfile && !leaderNewProfile.error) {
                               safeUpdateProfile(acc, leaderNewProfile);
                             }
@@ -1416,6 +1506,77 @@ async function startBattle(token: string) {
                       await sleep(11000);
                       continue;
                     }
+                  }
+                }
+
+                // 1. 單人模式下的層數上限 (mapLevel) 檢查
+                if (!isParty) {
+                  const mapLevel = acc.automation.battle.setting.mapLevel || 0;
+                  if (mapLevel > 0 && currentStage >= mapLevel) {
+                    addLog(
+                      acc,
+                      "battle",
+                      `已達到目標層數上限 (${currentStage}F >= ${mapLevel}F)，正在回城並停止自動戰鬥...`
+                    );
+
+                    // 1. 停止自動戰鬥
+                    acc.automation.battle.running = false;
+
+                    // 2. 移動回起始之鎮 (0)
+                    try {
+                      const moveRes = await teleportOrMoveToTown(acc);
+                      if (moveRes && !moveRes.error) {
+                        safeUpdateProfile(acc, moveRes);
+                        addLog(
+                          acc,
+                          "battle",
+                          "已向伺服器發送回城移動請求，正在等待抵達..."
+                        );
+
+                        // 等待移動完成
+                        let waitTime = 11000;
+                        if (acc.profile.actionStatus === "移動") {
+                          const offset = acc.profile.serverOffsetMs || 0;
+                          const adjustedNow = moment().add(offset, "ms");
+                          const remainingMs = moment(
+                            acc.profile.actionStart
+                          ).diff(adjustedNow);
+                          waitTime = Math.min(
+                            300000,
+                            Math.max(11000, remainingMs + 2000)
+                          );
+                        }
+                        await sleep(waitTime);
+
+                        const arriveRes = await acc.userObj.moveComplete();
+                        if (arriveRes && !arriveRes.error) {
+                          safeUpdateProfile(acc, arriveRes);
+                          addLog(
+                            acc,
+                            "battle",
+                            "已成功返回起始之鎮，自動戰鬥結束。"
+                          );
+                        } else {
+                          addLog(
+                            acc,
+                            "battle",
+                            `抵達回城確認失敗: ${
+                              arriveRes?.message || "未知錯誤"
+                            }`
+                          );
+                        }
+                      } else {
+                        addLog(
+                          acc,
+                          "battle",
+                          `發送回城移動失敗: ${moveRes?.message || "未知錯誤"}`
+                        );
+                      }
+                    } catch (e: any) {
+                      console.error("[單人回城] 移動失敗:", e);
+                      addLog(acc, "battle", `回城出錯: ${e.message || e}`);
+                    }
+                    break;
                   }
                 }
 
@@ -1708,6 +1869,64 @@ function stopForge(token: string) {
   }
 }
 
+async function autoRestoreSpUntilFull(acc: Account) {
+  const useMedicine = acc.automation.mining.setting?.useMedicine === true;
+  const medicineSpId = acc.automation.mining.setting?.medicineSpId;
+
+  if (!useMedicine) {
+    return;
+  }
+
+  if (!medicineSpId) {
+    addLog(acc, "mining", "[吃補提示] 啟用了吃補，但未設定 SP 補品");
+    return;
+  }
+
+  let attempts = 0;
+  // 吃到滿：當前 SP < 總 SP
+  while (acc.profile.sp < acc.profile.fullSp && attempts < 200) {
+    // 檢查背包裡有沒有這個補品
+    const itemObj = acc.items.items?.find(
+      (i: any) => i.item_id === Number(medicineSpId)
+    );
+    if (!itemObj || itemObj.quantity <= 0) {
+      addLog(acc, "mining", "[吃補提示] 背包中找不到 SP 補品或數量不足");
+      break;
+    }
+
+    addLog(
+      acc,
+      "mining",
+      `[自動吃補] 正在使用 SP 補品: ${itemObj.name}，剩餘數量: ${
+        itemObj.quantity - 1
+      }`
+    );
+
+    const prevSp = acc.profile.sp;
+    const res = await acc.userObj.eatMedicine(medicineSpId);
+    if (res && res.profile) {
+      safeUpdateProfile(acc, res.profile);
+      if (res.items) {
+        acc.items.items = res.items;
+      }
+      if (acc.profile.sp <= prevSp) {
+        addLog(
+          acc,
+          "mining",
+          "[自動吃補] 警告：使用補品後 SP 未增加，停止吃補"
+        );
+        break;
+      }
+    } else {
+      addLog(acc, "mining", "[自動吃補] 使用補品失敗");
+      break;
+    }
+
+    attempts++;
+    await sleep(800); // 延遲以防太頻繁
+  }
+}
+
 async function startMining(token: string) {
   const acc = accounts.find((a) => a.token === token);
   if (!acc || acc.automation.mining.running) return;
@@ -1726,6 +1945,9 @@ async function startMining(token: string) {
   const currentLoopId = Date.now();
   acc.automation.mining.loopId = currentLoopId;
   addLog(acc, "mining", "自動採礦已啟動");
+
+  // 啟動後自動吃補
+  await autoRestoreSpUntilFull(acc);
 
   (async () => {
     while (
@@ -1795,6 +2017,8 @@ async function startMining(token: string) {
                   }，獲得資源: ${rewardsStr}`
                 );
                 await refreshAccountState(acc);
+                // 收割礦物後自動吃補
+                await autoRestoreSpUntilFull(acc);
               } else {
                 addLog(acc, "mining", `資源收集失敗，將於下個週期重試。`);
               }
@@ -1826,11 +2050,15 @@ async function startMining(token: string) {
   })();
 }
 
-function stopMining(token: string) {
+async function stopMining(token: string) {
   const acc = accounts.find((a) => a.token === token);
   if (acc) {
     acc.automation.mining.running = false;
+    acc.automation.mining.loopId = undefined;
     addLog(acc, "mining", "自動採礦已停止");
+
+    // 停止後自動吃補
+    await autoRestoreSpUntilFull(acc);
   }
 }
 

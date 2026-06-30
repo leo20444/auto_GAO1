@@ -42,6 +42,41 @@
           >
         </el-col>
       </el-row>
+
+      <!-- SP 補品設定 -->
+      <el-divider border-style="dashed" style="margin: 15px 0" />
+      <el-row :gutter="20" align="middle">
+        <el-col :xs="24" :sm="8" style="margin-bottom: 8px">
+          <el-checkbox v-model="miningSetting.useMedicine"
+            >啟用自動吃補 (吃到滿)</el-checkbox
+          >
+        </el-col>
+        <el-col :xs="24" :sm="16" v-if="miningSetting.useMedicine">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span
+              style="
+                font-size: 13px;
+                color: var(--text-secondary);
+                white-space: nowrap;
+              "
+              >SP 補品:</span
+            >
+            <el-select
+              v-model="miningSetting.medicineSpId"
+              placeholder="請選擇 SP 回復補品 (例如：精力湯)"
+              clearable
+              style="width: 100%"
+            >
+              <el-option
+                v-for="item in medicineSpOptions"
+                :key="item.item_id"
+                :label="`${item.name} (存量: ${item.quantity})`"
+                :value="String(item.item_id)"
+              />
+            </el-select>
+          </div>
+        </el-col>
+      </el-row>
     </el-card>
 
     <!-- 狀態與進度 -->
@@ -169,6 +204,17 @@ const logs = computed(() => account.value?.automation.mining.logs || []);
 const miningSetting = ref({
   zone: "forest",
   duration: 15,
+  useMedicine: true,
+  medicineSpId: "",
+});
+
+const medicineSpOptions = computed(() => {
+  if (!account.value?.items?.items) return [];
+  return account.value.items.items.filter((item: any) => {
+    const effectType = item.effect?.type;
+    const mpValue = item.effect?.mp || 0;
+    return effectType === "mp" || (effectType === "restore" && mpValue > 0);
+  });
 });
 
 // 當更換帳號時，同步設定
@@ -178,6 +224,10 @@ watch(
     if (newVal?.automation.mining.setting) {
       miningSetting.value.zone = newVal.automation.mining.setting.zone;
       miningSetting.value.duration = newVal.automation.mining.setting.duration;
+      miningSetting.value.useMedicine =
+        newVal.automation.mining.setting.useMedicine ?? true;
+      miningSetting.value.medicineSpId =
+        newVal.automation.mining.setting.medicineSpId ?? "";
     }
   },
   { immediate: true, deep: true }
@@ -190,6 +240,9 @@ watch(
     if (account.value) {
       account.value.automation.mining.setting.zone = newVal.zone;
       account.value.automation.mining.setting.duration = newVal.duration;
+      account.value.automation.mining.setting.useMedicine = newVal.useMedicine;
+      account.value.automation.mining.setting.medicineSpId =
+        newVal.medicineSpId;
     }
   },
   { deep: true }

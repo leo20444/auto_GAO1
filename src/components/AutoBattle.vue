@@ -437,20 +437,6 @@
           </el-select>
         </el-col>
         <el-col :xs="24" :sm="12">
-          <div class="input-label">每次使用數量</div>
-          <el-input-number
-            v-model="medicineSetting.medicineHpQuantity"
-            :min="1"
-            style="width: 100%"
-          />
-        </el-col>
-      </el-row>
-      <el-row :gutter="20" style="margin-top: 15px">
-        <el-col
-          :xs="24"
-          :sm="12"
-          style="margin-bottom: 10px; sm-margin-bottom: 0"
-        >
           <div class="input-label">SP 補品</div>
           <el-select
             v-model="medicineSetting.medicineSpId"
@@ -464,14 +450,6 @@
               :value="item.id"
             />
           </el-select>
-        </el-col>
-        <el-col :xs="24" :sm="12">
-          <div class="input-label">每次使用數量</div>
-          <el-input-number
-            v-model="medicineSetting.medicineSpQuantity"
-            :min="1"
-            style="width: 100%"
-          />
         </el-col>
       </el-row>
     </el-card>

@@ -30,17 +30,13 @@ class autoBattleChecker {
   }
 
   safeMove = async (mapId) => {
+    const currentMapId = getMapIdByName(this.profile.zoneName);
     const pMode = this.setting?.partyMode;
     const isMember = pMode && pMode.enabled && !pMode.isLeader;
 
     // 如果是組隊中的隊員，且目前本機顯示在起始之鎮，而目標不是起始之鎮
     // 隊長可能已帶隊移動，將隊員拉過去了，所以此時先嘗試確認落地一次
-    if (
-      isMember &&
-      getMapIdByName(this.profile.zoneName) === 0 &&
-      mapId !== 0
-    ) {
-      console.log("[隊員落地檢查] 隊長可能已帶隊移動，嘗試直接確認落地...");
+    if (isMember && currentMapId === 0 && mapId !== 0) {
       const arriveRes = await this.user.moveComplete();
       if (
         arriveRes &&
@@ -55,19 +51,51 @@ class autoBattleChecker {
     }
 
     // 統一以設定表 ID 進行回城與水晶判定
-    if (mapId === 0 && this.setting.useTeleportCrystal) {
+    const isDead = this.profile.hp <= 0 || this.profile.actionStatus === "重生";
+    if (
+      mapId === 0 &&
+      this.setting.useTeleportCrystal &&
+      currentMapId !== 0 &&
+      !isDead
+    ) {
       const currentAcc = this.allAccounts?.find(
         (a) => a.token === this.user.token
       );
-      const crystal = currentAcc?.items?.items?.find(
+      let crystal = currentAcc?.items?.items?.find(
         (item) => item.item_id === 173 || item.id === 173
       );
-      const quantity = crystal ? crystal.quantity : 0;
+      let quantity = crystal ? crystal.quantity : 0;
+
+      // 如果啟用轉移水晶但庫存為 0，嘗試直接在野外自動購買補貨
+      if (quantity <= 0) {
+        ElMessage("偵測到啟用轉移水晶但庫存為 0，嘗試於野外向商店自動補貨...");
+        const buyRes = await this.user.buyShopItem(22, 10);
+        if (buyRes && !buyRes.error) {
+          ElMessage("野外補貨轉移水晶成功！已購買 10 個。");
+          const itemsRes = await this.user.item();
+          if (itemsRes && currentAcc) {
+            currentAcc.items.equipments = itemsRes.equipments || [];
+            currentAcc.items.items = itemsRes.items || [];
+          }
+          crystal = currentAcc?.items?.items?.find(
+            (item) => item.item_id === 173 || item.id === 173
+          );
+          quantity = crystal ? crystal.quantity : 0;
+        } else {
+          ElMessage.error(
+            "野外自動補貨水晶失敗: " +
+              (buyRes?.message || "未知錯誤") +
+              "，退化為普通回城。"
+          );
+        }
+      }
+
       if (quantity > 0) {
         ElMessage("偵測到啟用轉移水晶且庫存 > 0，發送傳送水晶請求...");
         const useRes = await this.user.useTeleportCrystal();
         if (useRes && !useRes.error) {
           ElMessage("使用轉移水晶回城成功！");
+          if (crystal) crystal.quantity -= 1;
           const profile = await this.user.getProfile();
           if (profile) {
             this.setProfileInfo(profile);
@@ -79,8 +107,6 @@ class autoBattleChecker {
             "使用轉移水晶失敗: " + (useRes?.message || "未知錯誤")
           );
         }
-      } else {
-        ElMessage("轉移水晶庫存不足，退化為普通回城。");
       }
     }
 
@@ -160,23 +186,19 @@ class autoBattleChecker {
     const hpMode = this.setting.hpRecoveryMode || "rest";
     const spMode = this.setting.spRecoveryMode || "rest";
 
-    console.log(
-      `[HP/SP 檢查] ${this.profile.name} - 當前 HP: ${this.profile.hp}/${this.profile.fullHp} (設定門檻: ${this.setting.hp}), SP: ${this.profile.sp}/${this.profile.fullSp} (設定門檻: ${this.setting.sp})`
-    );
-
     // 1. 檢查 HP
     if (
       this.profile.hp < this.profile.fullHp &&
       this.profile.hp <= this.setting.hp
     ) {
       if (hpMode === "medicine" && this.medicineCheckTag) {
-        ElMessage("HP 低於設定，嘗試吃藥...");
+        ElMessage("HP 低於設定，嘗試吃藥吃到滿...");
         const eatSuccess = await this.eatMedicine(
-          this.medicineSetting.medicineHpId,
-          this.medicineSetting.medicineHpQuantity
+          this.medicineSetting?.medicineHpId,
+          "hp"
         );
         if (eatSuccess) {
-          ElMessage("HP 吃藥成功，繼續下個步驟。");
+          ElMessage("HP 吃藥完成，繼續下個步驟。");
         } else {
           ElMessage("HP 補品不足或使用失敗，自動降級為休息！");
           await this.rest();
@@ -195,13 +217,13 @@ class autoBattleChecker {
       this.profile.sp <= this.setting.sp
     ) {
       if (spMode === "medicine" && this.medicineCheckTag) {
-        ElMessage("SP 低於設定，嘗試吃藥...");
+        ElMessage("SP 低於設定，嘗試吃藥吃到滿...");
         const eatSuccess = await this.eatMedicine(
-          this.medicineSetting.medicineSpId,
-          this.medicineSetting.medicineSpQuantity
+          this.medicineSetting?.medicineSpId,
+          "sp"
         );
         if (eatSuccess) {
-          ElMessage("SP 吃藥成功，繼續下個步驟。");
+          ElMessage("SP 吃藥完成，繼續下個步驟。");
         } else {
           ElMessage("SP 補品不足或使用失敗，自動降級為休息！");
           await this.rest();
@@ -224,6 +246,24 @@ class autoBattleChecker {
     }
 
     const currentMapId = getMapIdByName(this.profile.zoneName);
+
+    // 0.5 單人模式層數上限檢查 (在去往目標地圖之前進行)
+    const pModeCheck = this.setting.partyMode;
+    const isInPartyCheck = pModeCheck && pModeCheck.enabled;
+    if (
+      !isInPartyCheck &&
+      this.setting.mapLevel > 0 &&
+      this.profile.huntStage >= this.setting.mapLevel
+    ) {
+      if (currentMapId !== 0) {
+        ElMessage(
+          `已達到目標層數 (${this.profile.huntStage}F >= ${this.setting.mapLevel}F)，正在回城休息...`
+        );
+        await this.safeMove(0);
+        ElMessage("回城！");
+      }
+      return false;
+    }
 
     // 1. 如果角色當前在「起始之鎮」
     if (currentMapId === 0) {
@@ -431,22 +471,6 @@ class autoBattleChecker {
       return false;
     }
 
-    // 4. 層數上限檢查
-    const pMode = this.setting.partyMode;
-    const isInParty = pMode && pMode.enabled;
-    if (
-      !isInParty &&
-      this.setting.mapLevel > 0 &&
-      this.profile.huntStage >= this.setting.mapLevel
-    ) {
-      ElMessage(
-        `已達到目標層數 (${this.profile.huntStage}F >= ${this.setting.mapLevel}F)，正在回城休息...`
-      );
-      await this.safeMove(0);
-      ElMessage("回城！");
-      return false;
-    }
-
     return true;
   };
 
@@ -491,40 +515,54 @@ class autoBattleChecker {
     this.setProfileInfo(await this.user.rest());
   };
 
-  eatMedicine = async (medicineId, medicineQuantity) => {
+  eatMedicine = async (medicineId, type) => {
     if (!medicineId) {
       ElMessage("沒補品！");
       return false;
     }
-    const qty = Math.max(1, Number(medicineQuantity) || 1);
-    ElMessage(`開始吃補品 (預計吃 ${qty} 個)...`);
 
+    const isHp = type === "hp";
+    const targetAttr = isHp ? "hp" : "sp";
+    const fullAttr = isHp ? "fullHp" : "fullSp";
+
+    let attempts = 0;
     let latestProfile = null;
 
-    for (let i = 0; i < qty; i++) {
-      if (qty > 1) {
-        ElMessage(`使用補品中 (${i + 1}/${qty})...`);
-      } else {
-        ElMessage("使用補品中...");
-      }
+    while (
+      this.profile[targetAttr] < this.profile[fullAttr] &&
+      attempts < 200
+    ) {
+      ElMessage(
+        `使用補品中... (${targetAttr.toUpperCase()}: ${
+          this.profile[targetAttr]
+        }/${this.profile[fullAttr]})`
+      );
 
+      const prevValue = this.profile[targetAttr];
       let res = await this.user.eatMedicine(medicineId);
       if (res && res.profile) {
         latestProfile = res.profile;
         this.setProfileInfo(res.profile);
         this.profile = res.profile;
+
+        if (this.profile[targetAttr] <= prevValue) {
+          console.log(
+            `[HP/SP 吃補除錯] 警告：使用補品後 ${targetAttr.toUpperCase()} 未增加，中斷吃補循環以防浪費。`
+          );
+          break;
+        }
       } else {
-        ElMessage("補品不足或使用失敗！");
+        ElMessage("補品不足或使用失敗，停止吃補！");
         break;
       }
 
-      // 吃完一個後，延遲 800 毫秒以防太頻繁發起 API 導致 429 限制
-      if (i < qty - 1) {
-        await sleep(800);
+      attempts++;
+      if (this.profile[targetAttr] < this.profile[fullAttr]) {
+        await sleep(800); // 延遲以防 429
       }
     }
 
-    return latestProfile ? true : false;
+    return latestProfile !== null;
   };
 }
 

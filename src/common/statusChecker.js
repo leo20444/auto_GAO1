@@ -23,12 +23,6 @@ class statusCheck {
         const elapsedSec = this.actionTimeSeconds();
         const targetSeconds = 10; // 固定為 10 秒
 
-        console.log(
-          `[狀態檢查-休息] ${this.profile.name} 已進行 ${Math.floor(
-            elapsedSec
-          )} 秒 / 目標 ${targetSeconds} 秒`
-        );
-
         if (elapsedSec >= targetSeconds) {
           let profile = await this.user.restComplete();
           if (profile) {
@@ -72,13 +66,6 @@ class statusCheck {
         const remainingMs = arrivalTime.diff(adjustedNow());
         // 只要剩餘時間小於 15 秒，就判定已抵達並嘗試落地 (容忍 15 秒時鐘偏差)
         const isArrived = remainingMs <= 15000;
-        console.log(
-          `[狀態檢查-移動] ${
-            this.profile.name
-          } 目標抵達時間: ${arrivalTime.toISOString()} | 當前伺服器對齊時間: ${adjustedNow().toISOString()} | 剩餘時間: ${Math.ceil(
-            remainingMs / 1000
-          )} 秒 | 是否嘗試落地: ${isArrived}`
-        );
 
         if (isArrived) {
           let profile = await this.user.moveComplete();
@@ -102,11 +89,6 @@ class statusCheck {
       }
 
       case "重生":
-        console.log(
-          `[狀態檢查-重生] ${
-            this.profile.name
-          } 重生已耗時: ${this.actionTime()} 分`
-        );
         if (this.actionTime() >= 10) {
           this.setProfileInfo(await this.user.restComplete());
           ElMessage("復活！");
@@ -116,11 +98,6 @@ class statusCheck {
         return false;
 
       case "鍛造":
-        console.log(
-          `[狀態檢查-鍛造] ${
-            this.profile.name
-          } 鍛造剩餘時間: ${this.forgeTime()} 秒`
-        );
         if (this.forgeTime() < -5) {
           this.setProfileInfo(await this.user.forgeComplete());
           ElMessage("鍛造完成");
