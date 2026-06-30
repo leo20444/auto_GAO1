@@ -65,7 +65,22 @@
             </el-select>
           </el-col>
           <el-col :xs="24" :sm="16">
-            <div class="input-label">選擇裝備（點擊按鈕加入對應佇列）</div>
+            <div
+              class="input-label"
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <span>選擇裝備（點擊按鈕加入對應佇列）</span>
+              <span
+                v-if="!selectedType && (props.weaponList || []).length > 80"
+                style="font-size: 11px; color: #909399; font-weight: normal"
+              >
+                (僅顯示前 80 筆，請使用左側篩選精確查找)
+              </span>
+            </div>
             <div class="weapon-pool">
               <div
                 v-for="weapon in filteredWeapons"
@@ -84,66 +99,42 @@
                   耐久: {{ weapon.durability }}
                 </span>
 
-                <!-- 裝備分流按鈕 -->
+                <!-- 裝備分流按鈕（使用原生按鈕以獲得極佳渲染效能） -->
                 <span style="margin-left: 10px; display: inline-flex; gap: 4px">
-                  <!-- 主手按鈕（武器才顯示，需啟用主手佇列） -->
-                  <el-button
+                  <!-- 主手按鈕 -->
+                  <button
                     v-if="
                       enableMainQueue &&
                       !typeList.armor.includes(weapon.typeName)
                     "
-                    size="small"
-                    type="primary"
-                    plain
-                    style="
-                      padding: 2px 6px;
-                      font-size: 11px;
-                      height: 20px;
-                      line-height: 20px;
-                    "
+                    class="weapon-btn weapon-btn-main"
                     @click.stop="addToQueueMain(weapon)"
                   >
                     +主手
-                  </el-button>
-                  <!-- 副手按鈕（單手武器且啟用副手佇列） -->
-                  <el-button
+                  </button>
+                  <!-- 副手按鈕 -->
+                  <button
                     v-if="
                       enableOffQueue &&
                       weapon.hand_type !== 'two_hand' &&
                       !typeList.armor.includes(weapon.typeName)
                     "
-                    size="small"
-                    type="success"
-                    plain
-                    style="
-                      padding: 2px 6px;
-                      font-size: 11px;
-                      height: 20px;
-                      line-height: 20px;
-                    "
+                    class="weapon-btn weapon-btn-off"
                     @click.stop="addToQueueOff(weapon)"
                   >
                     +副手
-                  </el-button>
-                  <!-- 防具按鈕（防具且啟用防具佇列） -->
-                  <el-button
+                  </button>
+                  <!-- 防具按鈕 -->
+                  <button
                     v-if="
                       enableArmorQueue &&
                       typeList.armor.includes(weapon.typeName)
                     "
-                    size="small"
-                    type="warning"
-                    plain
-                    style="
-                      padding: 2px 6px;
-                      font-size: 11px;
-                      height: 20px;
-                      line-height: 20px;
-                    "
+                    class="weapon-btn weapon-btn-armor"
                     @click.stop="addToQueueArmor(weapon)"
                   >
                     +防具
-                  </el-button>
+                  </button>
                 </span>
               </div>
               <div v-if="filteredWeapons.length === 0" class="empty-pool">
@@ -408,6 +399,7 @@ const emits = defineEmits([
   "equipment-check",
   "update-check-weapon",
   "update-check-armor",
+  "equipment-check-off",
   "update:selected-weapon-queue-main",
   "update:selected-weapon-queue-off",
   "update:selected-armor-queue",
@@ -505,7 +497,10 @@ const allTypes = computed(() => {
 const filteredWeapons = computed(() => {
   const list: any[] = props.weaponList || [];
   const unselected = list.filter((w: any) => !isInQueue(w.id));
-  if (!selectedType.value) return unselected;
+  if (!selectedType.value) {
+    // 預設無篩選時限制僅顯示前 80 筆，極大提升大量裝備時的渲染效能與點開流暢度
+    return unselected.slice(0, 80);
+  }
   return unselected.filter((w: any) => w.typeName === selectedType.value);
 });
 
@@ -835,5 +830,53 @@ const handleEquipmentCheck = () => emits("equipment-check");
 .queue-actions {
   display: flex;
   gap: 4px;
+}
+
+/* 裝備選擇原生按鈕優化 */
+.weapon-btn {
+  background: transparent;
+  border: 1px solid #3a3d42;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  height: 20px;
+  line-height: 14px;
+  cursor: pointer;
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.weapon-btn-main {
+  color: #409eff;
+  border-color: rgba(64, 158, 255, 0.35);
+  background-color: rgba(64, 158, 255, 0.08);
+}
+
+.weapon-btn-main:hover {
+  background-color: rgba(64, 158, 255, 0.18);
+  border-color: #409eff;
+}
+
+.weapon-btn-off {
+  color: #67c23a;
+  border-color: rgba(103, 194, 58, 0.35);
+  background-color: rgba(103, 194, 58, 0.08);
+}
+
+.weapon-btn-off:hover {
+  background-color: rgba(103, 194, 58, 0.18);
+  border-color: #67c23a;
+}
+
+.weapon-btn-armor {
+  color: #e6a23c;
+  border-color: rgba(230, 162, 60, 0.35);
+  background-color: rgba(230, 162, 60, 0.08);
+}
+
+.weapon-btn-armor:hover {
+  background-color: rgba(230, 162, 60, 0.18);
+  border-color: #e6a23c;
 }
 </style>

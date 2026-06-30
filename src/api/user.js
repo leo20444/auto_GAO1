@@ -349,11 +349,9 @@ function user(inputToken, username = "", password = "") {
 
   this.run = async function (enableTimeline = true) {
     try {
-      console.log("[API] 發送趕路巡檢，先獲取組隊狀態...");
       await api.get(`${baseurl}/party/status`, { headers: getHeaders() });
       let chooseRes;
       try {
-        console.log("[API] 發送 /tower/choose (run) 請求...");
         chooseRes = await api.post(
           `${baseurl}/tower/choose`,
           { option: "run" },
@@ -371,7 +369,6 @@ function user(inputToken, username = "", password = "") {
           await this.moveComplete();
           await this.restComplete();
           await sleep(500);
-          console.log("[API] 重新發送 /tower/choose (run)...");
           chooseRes = await api.post(
             `${baseurl}/tower/choose`,
             { option: "run" },
@@ -435,11 +432,9 @@ function user(inputToken, username = "", password = "") {
 
   this.battle = async function (enableTimeline = true) {
     try {
-      console.log("[API] 發送戰鬥巡檢，先獲取組隊狀態...");
       await api.get(`${baseurl}/party/status`, { headers: getHeaders() });
       let chooseRes;
       try {
-        console.log("[API] 發送 /tower/choose (fight) 請求...");
         chooseRes = await api.post(
           `${baseurl}/tower/choose`,
           { option: "fight" },
@@ -457,7 +452,6 @@ function user(inputToken, username = "", password = "") {
           await this.moveComplete();
           await this.restComplete();
           await sleep(500);
-          console.log("[API] 重新發送 /tower/choose (fight)...");
           chooseRes = await api.post(
             `${baseurl}/tower/choose`,
             { option: "fight" },
@@ -704,11 +698,9 @@ function user(inputToken, username = "", password = "") {
 
   this.forge = async function (payload) {
     try {
-      console.log("[API] 發起鍛造，payload:", JSON.stringify(payload));
       const res = await api.post(`${baseurl}/forge/craft`, payload, {
         headers: getHeaders(),
       });
-      console.log("[API] 鍛造結果狀態:", res.status, res.data);
       if (res.status == 200) {
         return this.getProfile();
       } else {

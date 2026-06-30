@@ -292,80 +292,110 @@
                 /></el-icon>
               </el-tooltip>
             </div>
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                flex-wrap: wrap;
-              "
-            >
-              <el-select
-                v-model="forgePreference"
-                size="small"
-                placeholder="配置偏好"
-                style="width: 120px"
-              >
-                <el-option label="物攻優先" value="atk" />
-                <el-option label="物防優先" value="def" />
-                <el-option label="幸運優先" value="luck" />
-                <el-option label="耐久優先" value="durability" />
-                <el-option label="總數值最高" value="total" />
-              </el-select>
-              <el-select
-                v-model="selectedEnchantPrefs"
-                multiple
-                collapse-tags
-                collapse-tags-indicator
-                size="small"
-                placeholder="附魔偏好 (可複選)"
-                style="width: 180px"
-              >
-                <el-option
-                  v-for="(label, key) in elementBonusMap"
-                  :key="key"
-                  :label="label"
-                  :value="key"
-                />
-              </el-select>
-              <el-select
-                v-model="selectedGemPrefs"
-                multiple
-                collapse-tags
-                collapse-tags-indicator
-                size="small"
-                placeholder="特殊組合附魔(可複選)"
-                style="width: 180px"
-              >
-                <el-option label="風水" value="fengshui" />
-              </el-select>
-              <el-button
-                type="primary"
-                size="small"
-                @click="handleAutoFillMaterials"
-                :disabled="!selectedRecipe"
-              >
-                自動配置
-              </el-button>
-              <el-button
-                type="warning"
-                plain
-                size="small"
-                @click="handleResetMaterials"
-                >重置</el-button
-              >
+            <div class="forge-controls-area">
+              <!-- 偏好設定列 -->
+              <div class="forge-controls-prefs">
+                <el-select
+                  v-model="forgePreference"
+                  size="small"
+                  placeholder="配置偏好"
+                  style="width: 140px"
+                >
+                  <el-option label="部位推薦優先" value="recommended" />
+                  <el-option label="物攻優先" value="atk" />
+                  <el-option label="物防優先" value="def" />
+                  <el-option label="幸運優先" value="luck" />
+                  <el-option label="耐久優先" value="durability" />
+                  <el-option label="總數值最高" value="total" />
+                </el-select>
+                <el-select
+                  v-model="selectedEnchantPrefs"
+                  multiple
+                  collapse-tags
+                  collapse-tags-indicator
+                  size="small"
+                  placeholder="附魔偏好 (可複選)"
+                  style="width: 175px"
+                >
+                  <el-option
+                    v-for="(label, key) in elementBonusMap"
+                    :key="key"
+                    :label="label"
+                    :value="key"
+                  />
+                </el-select>
+                <el-select
+                  v-model="selectedGemPrefs"
+                  multiple
+                  collapse-tags
+                  collapse-tags-indicator
+                  size="small"
+                  placeholder="特殊附魔(可複選)"
+                  style="width: 155px"
+                >
+                  <el-option label="風水" value="fengshui" />
+                </el-select>
+              </div>
+              <!-- 操作按鈕列 -->
+              <div class="forge-controls-actions">
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="handleAutoFillMaterials"
+                  :disabled="!selectedRecipe"
+                >
+                  智能自動配置
+                </el-button>
+                <el-button
+                  type="warning"
+                  plain
+                  size="small"
+                  @click="handleResetMaterials"
+                  >重置</el-button
+                >
+              </div>
             </div>
           </div>
           <div
             v-if="displayMaterialsList.length > 0"
             style="margin-top: 10px; margin-bottom: 10px"
           >
+            <!-- 智慧提示橫幅 -->
+            <div
+              v-if="getCurrentRecipeCategory() !== 'none'"
+              class="smart-tip-banner"
+            >
+              <span class="smart-tip-icon">提示</span>
+              <span v-if="getCurrentRecipeCategory() === 'weapon'">
+                您正在製作冷兵器，推薦搭配使用 黑曜石 / 藍黑曜石
+                以獲得額外部位加成！
+              </span>
+              <span v-if="getCurrentRecipeCategory() === 'shield'">
+                您正在製作盾牌／盔甲，推薦搭配使用 嫩寶殼 / 藍寶殼 / 藍黑寶殼
+                以獲得額外部位加成！
+              </span>
+              <span v-if="getCurrentRecipeCategory() === 'armor'">
+                您正在製作防具大衣，推薦搭配使用 兔皮 / 黑兔皮 / 草原狼皮 /
+                水牛皮 以獲得額外部位加成！
+              </span>
+            </div>
+            <!-- 材料分類標籤頁按鈕組 -->
+            <div style="margin-bottom: 15px">
+              <el-radio-group v-model="activeMaterialTab" size="default">
+                <el-radio-button label="all">全部</el-radio-button>
+                <el-radio-button label="wood">木材</el-radio-button>
+                <el-radio-button label="metal">金屬/礦石</el-radio-button>
+                <el-radio-button label="bios">生物素材</el-radio-button>
+                <el-radio-button label="gem">寶石/水晶</el-radio-button>
+                <el-radio-button label="dirt">土壤/其他</el-radio-button>
+              </el-radio-group>
+            </div>
             <div
               style="display: flex; align-items: center; gap: 15px; width: 100%"
             >
               <el-input
                 v-model="searchMaterialQuery"
-                placeholder="搜尋材料名稱進行模糊篩選..."
+                placeholder="搜尋名稱 / 標籤 / 隱藏加成屬性..."
                 clearable
                 size="default"
                 style="flex: 1"
@@ -379,6 +409,7 @@
                 placeholder="材料卡牌排序 (可複選)"
                 style="width: 210px"
               >
+                <el-option label="推薦加成置頂" value="recommended" />
                 <el-option label="物攻" value="atk" />
                 <el-option label="物防" value="def" />
                 <el-option label="幸運" value="luck" />
@@ -415,40 +446,100 @@
                   selectedMaterials[item.item_id] > item.quantity,
               }"
             >
-              <div class="material-header">
-                <span class="material-name">{{ item.name }}</span>
-                <span class="material-owned">持有: {{ item.quantity }}</span>
+              <!-- 上半部資訊群組：緊湊排列，不受高度撐開 -->
+              <div class="material-card-main">
+                <div class="material-header">
+                  <span class="material-name">{{ item.name }}</span>
+                  <span class="material-owned">持有: {{ item.quantity }}</span>
+                </div>
+                <!-- 素材分類與屬性標籤 -->
+                <div class="material-card-tags">
+                  <!-- 動態推薦標籤 -->
+                  <span
+                    v-if="isMaterialRecommended(item.name)"
+                    class="badge-tag recommendation-tag"
+                  >
+                    {{ getRecommendationTagName() }}
+                  </span>
+                  <template v-if="item.tags && item.tags.length > 0">
+                    <span
+                      v-for="(tag, idx) in item.tags"
+                      :key="idx"
+                      class="badge-tag"
+                      :class="getTranslatedTag(tag).colorClass"
+                    >
+                      {{ getTranslatedTag(tag).text }}
+                    </span>
+                  </template>
+                </div>
+                <div class="material-stats">
+                  <span
+                    v-if="parseFloat(item.bonus_atk) !== 0"
+                    class="stat-tag atk"
+                    >物攻 +{{ item.bonus_atk }}</span
+                  >
+                  <span
+                    v-if="parseFloat(item.bonus_def) !== 0"
+                    class="stat-tag def"
+                    >物防 +{{ item.bonus_def }}</span
+                  >
+                  <span
+                    v-if="parseFloat(item.bonus_luck) !== 0"
+                    class="stat-tag luck"
+                    >幸運 +{{ item.bonus_luck }}</span
+                  >
+                  <span
+                    v-if="parseFloat(item.bonus_durability) !== 0"
+                    class="stat-tag durability"
+                    >耐久 +{{ item.bonus_durability }}</span
+                  >
+                  <!-- 附魔效果標籤 -->
+                  <span
+                    v-for="(val, key) in item.element_bonus"
+                    :key="key"
+                    class="stat-tag element"
+                  >
+                    {{ elementBonusMap[key] || key }}: +{{ val }}
+                  </span>
+                </div>
+                <!-- 隱藏加成 (推測) -->
+                <div
+                  v-if="speculativeBonuses[item.name]"
+                  class="hidden-bonus-section"
+                >
+                  <div class="hidden-bonus-title">
+                    <el-tooltip
+                      content="此為社群玩家推測數據，非官方數值，僅供參考"
+                      placement="top"
+                    >
+                      <span>隱藏加成 (推測)</span>
+                    </el-tooltip>
+                  </div>
+                  <div class="hidden-bonus-stats">
+                    <span
+                      v-if="speculativeBonuses[item.name].atk"
+                      class="h-stat"
+                      >攻 +{{ speculativeBonuses[item.name].atk }}</span
+                    >
+                    <span
+                      v-if="speculativeBonuses[item.name].def"
+                      class="h-stat"
+                      >防 +{{ speculativeBonuses[item.name].def }}</span
+                    >
+                    <span
+                      v-if="speculativeBonuses[item.name].luck"
+                      class="h-stat"
+                      >幸 +{{ speculativeBonuses[item.name].luck }}</span
+                    >
+                    <span
+                      v-if="speculativeBonuses[item.name].dur"
+                      class="h-stat"
+                      >耐 +{{ speculativeBonuses[item.name].dur }}</span
+                    >
+                  </div>
+                </div>
               </div>
-              <div class="material-stats">
-                <span
-                  v-if="parseFloat(item.bonus_atk) !== 0"
-                  class="stat-tag atk"
-                  >物攻 +{{ item.bonus_atk }}</span
-                >
-                <span
-                  v-if="parseFloat(item.bonus_def) !== 0"
-                  class="stat-tag def"
-                  >物防 +{{ item.bonus_def }}</span
-                >
-                <span
-                  v-if="parseFloat(item.bonus_luck) !== 0"
-                  class="stat-tag luck"
-                  >幸運 +{{ item.bonus_luck }}</span
-                >
-                <span
-                  v-if="parseFloat(item.bonus_durability) !== 0"
-                  class="stat-tag durability"
-                  >耐久 +{{ item.bonus_durability }}</span
-                >
-                <!-- 附魔效果標籤 -->
-                <span
-                  v-for="(val, key) in item.element_bonus"
-                  :key="key"
-                  class="stat-tag element"
-                >
-                  {{ elementBonusMap[key] || key }}: +{{ val }}
-                </span>
-              </div>
+              <!-- 下半部控制區：固定貼底 -->
               <div class="material-control">
                 <el-input-number
                   v-model="selectedMaterials[item.item_id]"
@@ -534,9 +625,210 @@ const recipes = ref<any[]>([]);
 const backpackMaterials = ref<any[]>([]);
 const loadingRecipes = ref(false);
 const searchMaterialQuery = ref("");
+const activeMaterialTab = ref("all");
 
 const onlyShowEnchanted = ref(false);
 const useBossMaterials = ref(false);
+
+// 隱藏加成數據表 (玩家推測)
+const speculativeBonuses: Record<
+  string,
+  { atk?: string; def?: string; luck?: string; dur?: string }
+> = {
+  柯巴脂: { atk: "15%", def: "15%", luck: "20%", dur: "15%" },
+  琥珀: { atk: "25%", def: "20%", luck: "5%" },
+  綠水靈珠: { atk: "5%", def: "15%", luck: "10%", dur: "10%" },
+  超級綠水靈珠: { atk: "10%", def: "15%", luck: "10%", dur: "10%" },
+  菇菇寶貝傘: { atk: "15%", luck: "5%", dur: "5%" },
+  滑菇黏液: { atk: "10%", def: "10%", luck: "10%", dur: "10%" },
+  超巨大蘑菇王傘: { atk: "10%", luck: "5%", dur: "5%" },
+  狗頭人尾巴: { atk: "5%", def: "10%", dur: "15%" },
+  大奶罐尾巴: { def: "10%", dur: "5%" },
+  巴洛古之眼: { atk: "10%", def: "10%", luck: "10%", dur: "15%" },
+};
+
+// 標籤中英對照翻譯表
+const tagTranslationMap: Record<string, { text: string; colorClass: string }> =
+  {
+    // 大類
+    wood: { text: "木材", colorClass: "category-wood" },
+    metal: { text: "金屬", colorClass: "category-metal" },
+    bios: { text: "生物", colorClass: "category-bios" },
+    crystal: { text: "水晶", colorClass: "category-gem" },
+    jewelry: { text: "寶石", colorClass: "category-gem" },
+    dirt: { text: "土壤", colorClass: "category-dirt" },
+    // 屬性標籤
+    sharp: { text: "鋒利", colorClass: "property-tag" },
+    stinky: { text: "惡臭", colorClass: "property-tag" },
+    tail: { text: "尾部", colorClass: "property-tag" },
+    mushroom: { text: "蕈菇", colorClass: "property-tag" },
+    spirit: { text: "靈性", colorClass: "property-tag" },
+    food: { text: "食物", colorClass: "property-tag" },
+    curse: { text: "詛咒", colorClass: "property-tag" },
+    ice: { text: "冰霜", colorClass: "property-tag" },
+    sleep: { text: "睡眠", colorClass: "property-tag" },
+    // 補全所有缺失的素材標籤
+    cap: { text: "菇傘", colorClass: "property-tag" },
+    eye: { text: "眼部", colorClass: "property-tag" },
+    flag: { text: "旗幟", colorClass: "property-tag" },
+    fur: { text: "毛皮", colorClass: "property-tag" },
+    grandma: { text: "白髮白骨", colorClass: "property-tag" },
+    horn: { text: "獸角", colorClass: "property-tag" },
+    ink: { text: "墨汁", colorClass: "property-tag" },
+    medicine: { text: "藥材", colorClass: "property-tag" },
+    sauce: { text: "醬汁", colorClass: "property-tag" },
+    shell: { text: "寶殼", colorClass: "property-tag" },
+    slime: { text: "黏液", colorClass: "property-tag" },
+    stone: { text: "礦石", colorClass: "property-tag" },
+  };
+
+// 取得分類標記
+function getMaterialCategory(item: any): string {
+  if (!item.tags || item.tags.length === 0) return "other";
+  const tags = item.tags.map((t: string) => t.toLowerCase());
+
+  // 1. 生物素材優先判定 (移除 sharp 避免誤判定黑曜石，並使有 Bios 的菇傘/黏液收進生物分頁)
+  if (
+    tags.includes("bios") ||
+    tags.includes("horn") ||
+    tags.includes("claw") ||
+    tags.includes("tail")
+  ) {
+    return "bios";
+  }
+
+  // 2. 木材判定 (此時不帶 Bios 的純木頭才會落在這裡)
+  if (tags.includes("wood")) return "wood";
+
+  // 3. 金屬/礦石判定
+  if (tags.includes("metal") || tags.includes("ore") || tags.includes("stone"))
+    return "metal";
+
+  // 4. 寶石/水晶判定
+  if (
+    tags.includes("jewelry") ||
+    tags.includes("crystal") ||
+    tags.includes("gem")
+  ) {
+    return "gem";
+  }
+
+  // 5. 土壤判定
+  if (tags.includes("dirt") || tags.includes("sand")) return "dirt";
+
+  return "other";
+}
+
+// 翻譯標籤
+function getTranslatedTag(tag: string) {
+  const key = tag.toLowerCase();
+  if (tagTranslationMap[key]) {
+    return tagTranslationMap[key];
+  }
+  return { text: tag, colorClass: "property-tag" };
+}
+
+// 取得目前選擇配方的分類 (冷兵器/防具大衣/盾牌/無)
+function getCurrentRecipeCategory(): "weapon" | "armor" | "shield" | "none" {
+  if (!selectedRecipe.value) return "none";
+  const name = (selectedRecipe.value.name || "").toLowerCase();
+  const tags = (selectedRecipe.value.tags || []).map((t: string) =>
+    t.toLowerCase()
+  );
+
+  // 盾甲 = 盾牌 / 盔甲 (使用寶殼類)
+  if (
+    name.includes("盾") ||
+    name.includes("盔甲") ||
+    name.includes("鎧甲") ||
+    name.includes("重甲") ||
+    tags.includes("shield") ||
+    tags.includes("heavy") ||
+    tags.includes("plate")
+  ) {
+    return "shield";
+  }
+
+  // 大衣/防具 (使用毛皮類)
+  if (
+    name.includes("大衣") ||
+    name.includes("護甲") ||
+    name.includes("服") ||
+    name.includes("衣") ||
+    name.includes("皮甲") ||
+    name.includes("輕甲") ||
+    tags.includes("coat") ||
+    tags.includes("armor") ||
+    tags.includes("leather") ||
+    tags.includes("cloth") ||
+    tags.includes("light")
+  ) {
+    return "armor";
+  }
+
+  if (
+    name.includes("刀") ||
+    name.includes("劍") ||
+    name.includes("槍") ||
+    name.includes("錘") ||
+    name.includes("斧") ||
+    name.includes("杖") ||
+    tags.includes("dagger") ||
+    tags.includes("sword") ||
+    tags.includes("one-handed sword") ||
+    tags.includes("two-handed sword") ||
+    tags.includes("rapier") ||
+    tags.includes("hammer") ||
+    tags.includes("axe") ||
+    tags.includes("spear") ||
+    tags.includes("wand") ||
+    tags.includes("bow") ||
+    tags.includes("greatsword") ||
+    tags.includes("katana")
+  ) {
+    return "weapon";
+  }
+
+  return "none";
+}
+
+// 判斷材料是否為當前配方的部位加成推薦材料
+function isMaterialRecommended(itemName: string): boolean {
+  const cat = getCurrentRecipeCategory();
+  if (cat === "none") return false;
+
+  const name = itemName.toLowerCase();
+
+  // A. 黑曜石類 -> 冷兵器
+  if (cat === "weapon") {
+    return name.includes("黑曜石");
+  }
+
+  // B. 寶殼類 -> 盾牌
+  if (cat === "shield") {
+    return name.includes("殼") && !name.includes("花");
+  }
+
+  // C. 毛皮類 -> 大衣/防具
+  if (cat === "armor") {
+    return (
+      name.includes("皮") &&
+      !name.includes("綠水靈珠") &&
+      !name.includes("超級綠水靈珠")
+    );
+  }
+
+  return false;
+}
+
+// 取得推薦標籤名稱
+function getRecommendationTagName(): string {
+  const cat = getCurrentRecipeCategory();
+  if (cat === "weapon") return "兵器適用";
+  if (cat === "shield") return "盾甲適用";
+  if (cat === "armor") return "大衣適用";
+  return "推薦素材";
+}
 const bossMaterialNames = ["金牛角", "鎖鏈蛇牙", "超巨大蘑菇王傘"];
 const gemItemIds = [119, 123, 124, 125, 126];
 const specialMaterialsConfig: Record<
@@ -556,6 +848,11 @@ const selectedGemPrefs = ref<string[]>([]);
 const materialSortPrefs = ref<string[]>([]);
 
 const displayMaterialsList = computed(() => {
+  // 強制讓 Vue 追蹤這些響應式變數的變化
+  void materialSortPrefs.value;
+  void result_item_id.value;
+  void selectedRecipe.value;
+
   const list = [...backpackMaterials.value];
 
   // 取得目前選中收藏組合的所有材料 ID
@@ -678,7 +975,16 @@ const displayMaterialsList = computed(() => {
     if (qtyA > 0 && qtyB === 0) return -1;
     if (qtyA === 0 && qtyB > 0) return 1;
 
-    // 優先級二：檢查是否有勾選屬性排序
+    // 優先級之二：檢查是否包含部位推薦排序
+    if (materialSortPrefs.value.includes("recommended")) {
+      const recA = isMaterialRecommended(a.name) ? 1 : 0;
+      const recB = isMaterialRecommended(b.name) ? 1 : 0;
+      if (recA !== recB) {
+        return recB - recA;
+      }
+    }
+
+    // 優先級三：檢查是否有勾選屬性排序
     const activeAttrSorts = materialSortPrefs.value.filter(
       (s) => s === "atk" || s === "def" || s === "luck" || s === "durability"
     );
@@ -716,6 +1022,16 @@ const displayMaterialsList = computed(() => {
 const filteredMaterials = computed(() => {
   let list = displayMaterialsList.value;
 
+  if (activeMaterialTab.value !== "all") {
+    list = list.filter((item) => {
+      const cat = getMaterialCategory(item);
+      if (activeMaterialTab.value === "dirt") {
+        return cat === "dirt" || cat === "other";
+      }
+      return cat === activeMaterialTab.value;
+    });
+  }
+
   if (onlyShowEnchanted.value) {
     list = list.filter(
       (item) =>
@@ -728,7 +1044,54 @@ const filteredMaterials = computed(() => {
     return list;
   }
   const query = searchMaterialQuery.value.trim().toLowerCase();
-  return list.filter((item) => (item.name || "").toLowerCase().includes(query));
+
+  return list.filter((item) => {
+    // 1. 名稱匹配
+    const nameMatch = (item.name || "").toLowerCase().includes(query);
+    if (nameMatch) return true;
+
+    // 2. 標籤匹配 (支援中英文標籤)
+    if (item.tags && item.tags.length > 0) {
+      const tagMatch = item.tags.some((tag: string) => {
+        const trans = getTranslatedTag(tag);
+        return (
+          tag.toLowerCase().includes(query) ||
+          trans.text.toLowerCase().includes(query)
+        );
+      });
+      if (tagMatch) return true;
+    }
+
+    // 3. 隱藏加成屬性匹配
+    const spec = speculativeBonuses[item.name];
+    if (spec) {
+      // 搜尋關鍵字為 "隱藏" / "推測" / "hidden"
+      if (query === "隱藏" || query === "推測" || query === "hidden")
+        return true;
+
+      // 屬性關鍵字篩選
+      const hasAtk =
+        spec.atk &&
+        (query === "攻" ||
+          query === "物攻" ||
+          query === "atk" ||
+          query.includes("攻擊"));
+      const hasDef =
+        spec.def &&
+        (query === "防" ||
+          query === "物防" ||
+          query === "def" ||
+          query.includes("防禦"));
+      const hasLuck =
+        spec.luck && (query === "幸" || query === "幸運" || query === "luck");
+      const hasDur =
+        spec.dur && (query === "耐" || query === "耐久" || query === "dur");
+
+      if (hasAtk || hasDef || hasLuck || hasDur) return true;
+    }
+
+    return false;
+  });
 });
 
 // 防止 store→local 和 local→store 互相觸發的防護 flag
@@ -1003,7 +1366,7 @@ watch(
 );
 
 const selectedRecipe = computed(() => {
-  return recipes.value.find((r) => r.id === result_item_id.value);
+  return recipes.value.find((r) => r.id === Number(result_item_id.value));
 });
 
 const requiredQuantity = computed(() => {
@@ -1221,6 +1584,15 @@ const handleAutoFillMaterials = () => {
         parseFloat(m.bonus_def || 0) +
         parseFloat(m.bonus_luck || 0) +
         parseFloat(m.bonus_durability || 0);
+    } else if (forgePreference.value === "recommended") {
+      // 部位加成優先：若是推薦素材，加高額優先分，其餘按照總屬性補齊排序
+      const isRec = isMaterialRecommended(m.name);
+      baseVal = isRec ? 50000 : 0;
+      baseVal +=
+        parseFloat(m.bonus_atk || 0) +
+        parseFloat(m.bonus_def || 0) +
+        parseFloat(m.bonus_luck || 0) +
+        parseFloat(m.bonus_durability || 0);
     }
 
     // 附魔加分 (符合偏好且帶有附魔的權重為 1,000,000)
@@ -1309,6 +1681,8 @@ const handleAutoFillMaterials = () => {
 
 const getPreferenceName = (pref: string) => {
   switch (pref) {
+    case "recommended":
+      return "部位推薦優先";
     case "atk":
       return "物攻優先";
     case "def":
@@ -1758,7 +2132,6 @@ onMounted(async () => {
   padding: 10px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   transition: all 0.2s ease;
 }
 
@@ -1860,10 +2233,164 @@ onMounted(async () => {
   color: #67c23a;
 }
 
+/* 素材分類與標籤樣式 */
+.material-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.badge-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 大類標籤顏色 */
+.category-wood {
+  background-color: rgba(103, 194, 58, 0.15);
+  color: #67c23a;
+  border: 1px solid rgba(103, 194, 58, 0.3);
+}
+
+.category-metal {
+  background-color: rgba(144, 147, 153, 0.15);
+  color: #a8abb2;
+  border: 1px solid rgba(144, 147, 153, 0.3);
+}
+
+.category-bios {
+  background-color: rgba(230, 162, 60, 0.15);
+  color: #e6a23c;
+  border: 1px solid rgba(230, 162, 60, 0.3);
+}
+
+.category-gem {
+  background-color: rgba(179, 127, 235, 0.15);
+  color: #b37feb;
+  border: 1px solid rgba(179, 127, 235, 0.3);
+}
+
+.category-dirt {
+  background-color: rgba(135, 109, 90, 0.15);
+  color: #c0a99d;
+  border: 1px solid rgba(135, 109, 90, 0.3);
+}
+
+/* 屬性特性標籤 */
+.property-tag {
+  background-color: rgba(64, 158, 255, 0.1);
+  color: #409eff;
+  border: 1px solid rgba(64, 158, 255, 0.2);
+}
+
+/* 隱藏加成區塊 */
+.hidden-bonus-section {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(124, 58, 237, 0.05);
+  border: 1px dashed rgba(124, 58, 237, 0.3);
+}
+
+.hidden-bonus-title {
+  font-size: 10px;
+  color: #b37feb;
+  font-weight: bold;
+  margin-bottom: 3px;
+  cursor: help;
+  display: inline-block;
+}
+
+.hidden-bonus-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.h-stat {
+  font-size: 9px;
+  color: #d8b4fe;
+}
+
 @media (max-width: 768px) {
   .craft-count-col {
     text-align: left !important;
     margin-top: 10px;
   }
+}
+
+/* 卡片上半部資訊群組容器 */
+.material-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 數量控制區固定置底 */
+.material-control {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* 配置偏好操作列重構 */
+.forge-controls-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.forge-controls-prefs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.forge-controls-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 智慧提示橫幅 */
+.smart-tip-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(64, 158, 255, 0.07);
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #a0cfff;
+  margin-bottom: 12px;
+}
+
+.smart-tip-icon {
+  font-size: 10px;
+  font-weight: bold;
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.15);
+  border: 1px solid rgba(64, 158, 255, 0.3);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 部位推薦標籤 */
+.recommendation-tag {
+  background-color: rgba(245, 108, 108, 0.12) !important;
+  color: #f89898 !important;
+  border: 1px solid rgba(245, 108, 108, 0.35) !important;
+  font-weight: bold;
 }
 </style>

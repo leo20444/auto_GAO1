@@ -294,11 +294,17 @@ class weaponChecker {
   };
 
   wearEquipment = async (id) => {
-    this.weaponList = await this.user.equip(id);
+    const res = await this.user.equip(id);
+    if (Array.isArray(res)) {
+      this.weaponList = res;
+    }
   };
 
   unEquipped = async (id) => {
-    this.weaponList = await this.user.unEquip(id);
+    const res = await this.user.unEquip(id);
+    if (Array.isArray(res)) {
+      this.weaponList = res;
+    }
   };
 }
 
